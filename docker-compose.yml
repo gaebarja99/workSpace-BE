@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: teamsync-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-teamsync}
+      POSTGRES_USER: ${DB_USER:-teamsync}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-teamsync}
+    ports:
+      # 호스트 5432 -> 컨테이너 5432. DBeaver 접속 정보:
+      #   Host: localhost / Port: 5432 / Database: teamsync / User: teamsync / Password: teamsync
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - teamsync-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-teamsync} -d ${DB_NAME:-teamsync}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  teamsync-postgres-data:
