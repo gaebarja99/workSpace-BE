@@ -25,4 +25,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	boolean existsByRecipient_IdAndTask_IdAndTypeAndCreatedAtBetween(
 			Long recipientId, Long taskId, NotificationType type, LocalDateTime createdAtStart,
 			LocalDateTime createdAtEnd);
+
+	// FR-408 자동 배치(WeeklyReportService.remindUnsubmittedReports)의 하루/한 주 중복 방지: 태스크와
+	// 무관한 알림(WEEKLY_REPORT_REMINDER)이라 task_id 없이 recipient+type+기간으로만 멱등성을 검사한다.
+	// 계약 문서 문면 그대로 "같은 주/같은 타입"만 기준으로 삼으며, 여러 프로젝트에 속한 사용자라도 이번 주에
+	// 이미 한 번 리마인드를 받았다면 다른 프로젝트 몫은 다시 보내지 않는다(수동 재발송 버튼은 이 검사를 타지 않음).
+	boolean existsByRecipient_IdAndTypeAndCreatedAtBetween(
+			Long recipientId, NotificationType type, LocalDateTime createdAtStart, LocalDateTime createdAtEnd);
 }

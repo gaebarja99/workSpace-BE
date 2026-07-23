@@ -1,6 +1,7 @@
 package com.teamsync.back.task;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
@@ -47,4 +48,18 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 			+ "ORDER BY t.createdAt DESC, t.id DESC")
 	List<Task> searchByWorkspace(@Param("workspaceId") Long workspaceId, @Param("keyword") String keyword,
 			Pageable pageable);
+
+	// FR-401(주간 보고 자동 취합 "완료한 일"): project+담당자 기준, status=DONE AND updatedAt이
+	// [weekStart, weekEnd+1day) 범위인 태스크(계약 문서 규칙 그대로). 스냅샷 없이 매번 실시간 계산한다.
+	@EntityGraph(attributePaths = "assignees")
+	List<Task> findAllByProject_IdAndAssignees_IdAndStatusAndUpdatedAtBetween(
+			Long projectId, Long assigneeId, TaskStatus status, LocalDateTime updatedAtStart,
+			LocalDateTime updatedAtEnd);
+
+	// FR-401(주간 보고 자동 취합 "진행 중인 일"/이슈): project+담당자 기준, 완료되지 않은 태스크 전체.
+	// "진행 중" isNew(createdAt 범위) 여부와 "이슈"(OVERDUE/STALE) 판정은 이 목록으로 서비스 계층에서
+	// 함께 계산해 중복 조회를 피한다.
+	@EntityGraph(attributePaths = "assignees")
+	List<Task> findAllByProject_IdAndAssignees_IdAndStatusNot(Long projectId, Long assigneeId,
+			TaskStatus excludedStatus);
 }

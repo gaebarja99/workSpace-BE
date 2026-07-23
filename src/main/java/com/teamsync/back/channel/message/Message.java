@@ -64,6 +64,15 @@ public class Message extends BaseTimeEntity {
 	@Column(name = "message_type", nullable = false, length = 20)
 	private MessageType messageType = MessageType.USER;
 
+	// FR-402(주간 보고 하이라이트): pinned와 별개의 "개인 큐레이션" 성격이라 ADMIN/LEADER 전용인 pin과 달리
+	// 메시지 작성 권한과 동일한 ADMIN/LEADER/MEMBER 누구나 토글할 수 있다(GUEST 제외). 주간 보고서(WeeklyReport)의
+	// 하이라이트 섹션은 project+weekStart~weekEnd 범위로 이 필드를 실시간 조회해 구성한다(V10 마이그레이션).
+	@Column(nullable = false)
+	private boolean highlighted = false;
+
+	@Column(name = "highlighted_at")
+	private LocalDateTime highlightedAt;
+
 	public Message(Channel channel, User author, String content, Message parentMessage) {
 		this(channel, author, content, parentMessage, MessageType.USER);
 	}
@@ -102,5 +111,19 @@ public class Message extends BaseTimeEntity {
 	public void unpin() {
 		this.pinned = false;
 		this.pinnedAt = null;
+	}
+
+	/**
+	 * FR-402: "이번 주 하이라이트로 지정" 토글. ADMIN/LEADER/MEMBER 누구나 호출 가능(컨트롤러
+	 * @PreAuthorize에서 제어)하며, pin과 달리 답글에 대한 제한을 두지 않는다(개인 큐레이션 성격).
+	 */
+	public void highlight() {
+		this.highlighted = true;
+		this.highlightedAt = LocalDateTime.now();
+	}
+
+	public void unhighlight() {
+		this.highlighted = false;
+		this.highlightedAt = null;
 	}
 }

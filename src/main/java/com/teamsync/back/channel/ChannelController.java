@@ -84,6 +84,22 @@ public class ChannelController {
 		return ResponseEntity.ok(channelService.unpinMessage(principal, channelId, messageId));
 	}
 
+	// FR-402(주간 보고 하이라이트): 팀장 전용인 pin과 달리 개인 큐레이션 성격이라 메시지 작성과 동일하게
+	// GUEST만 제외한 ADMIN/LEADER/MEMBER 전원 허용한다.
+	@PostMapping("/api/channels/{channelId}/messages/{messageId}/highlight")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	public ResponseEntity<MessageResponse> highlightMessage(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long channelId, @PathVariable Long messageId) {
+		return ResponseEntity.ok(channelService.highlightMessage(principal, channelId, messageId));
+	}
+
+	@DeleteMapping("/api/channels/{channelId}/messages/{messageId}/highlight")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	public ResponseEntity<MessageResponse> unhighlightMessage(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long channelId, @PathVariable Long messageId) {
+		return ResponseEntity.ok(channelService.unhighlightMessage(principal, channelId, messageId));
+	}
+
 	// FR-301(메시지→태스크 전환, US-09): "팀원으로서" 즉시 전환하므로 메시지 작성과 동일하게
 	// GUEST만 제외한 ADMIN/LEADER/MEMBER 전원 허용(핀보다 넓은 권한, 계약 문서 참고).
 	@PostMapping("/api/channels/{channelId}/messages/{messageId}/convert-to-task")

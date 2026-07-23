@@ -125,6 +125,25 @@ public class ChannelService {
 	}
 
 	/**
+	 * FR-402(주간 보고 하이라이트): pin과 달리 답글 여부를 검증하지 않는다(개인 큐레이션이라 스레드
+	 * 답글도 하이라이트 대상이 될 수 있음). 컨트롤러의 @PreAuthorize가 ADMIN/LEADER/MEMBER(메시지
+	 * 작성 권한과 동일)로 이미 제한하므로 서비스 계층에서 추가 역할 검증은 하지 않는다.
+	 */
+	@Transactional
+	public MessageResponse highlightMessage(AuthenticatedUser principal, Long channelId, Long messageId) {
+		Message message = getMessageInChannel(principal, channelId, messageId);
+		message.highlight();
+		return MessageResponse.from(message);
+	}
+
+	@Transactional
+	public MessageResponse unhighlightMessage(AuthenticatedUser principal, Long channelId, Long messageId) {
+		Message message = getMessageInChannel(principal, channelId, messageId);
+		message.unhighlight();
+		return MessageResponse.from(message);
+	}
+
+	/**
 	 * FR-302: task.channelNotificationsEnabled가 켜져 있고 TaskMessageLink가 없는 태스크의 시스템 메시지
 	 * 게시 대상을 찾을 때 사용(F2에서 구현된 프로젝트 기본 채널 "general" 조회 로직 재사용).
 	 * general 채널이 아직 없으면(예: listChannels가 한 번도 호출되지 않은 신규 프로젝트) 빈 Optional을

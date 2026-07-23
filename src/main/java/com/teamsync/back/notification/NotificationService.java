@@ -3,6 +3,7 @@ package com.teamsync.back.notification;
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.common.exception.NotificationNotFoundException;
 import com.teamsync.back.notification.dto.NotificationResponse;
+import com.teamsync.back.project.Project;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.TaskStatus;
@@ -122,5 +123,33 @@ public class NotificationService {
 				notificationRepository.save(new Notification(assignee, type, message, task));
 			}
 		}
+	}
+
+	/**
+	 * FR-408(주간 보고 미제출 리마인드, 수동 재발송): "리마인드 재발송" 버튼 호출 시 사용. 멱등성 체크를
+	 * 전혀 하지 않고 호출될 때마다 즉시 알림을 생성한다(POST /reports/team/remind는 매번 재발송이 목적).
+	 * task 딥링크가 없는 알림이므로 task는 항상 null이다.
+	 */
+	@Transactional
+	public void notifyWeeklyReportReminder(Project project, User recipient) {
+		String message = "\"" + project.getName() + "\" 프로젝트의 이번 주 주간 보고서를 아직 제출하지 않았습니다.";
+		notificationRepository.save(new Notification(recipient, NotificationType.WEEKLY_REPORT_REMINDER, message, null));
+	}
+
+	/**
+	 * FR-408 자동 배치 전용: recipient가 [weekRangeStart, weekRangeEnd) 기간 동안 이미
+	 * WEEKLY_REPORT_REMINDER 알림을 받았으면 스킵하고, 아니면 생성한다. 반환값은 실제로 알림이
+	 * 생성되었는지 여부(호출자의 카운트 집계 용도는 아니며, 배치 로그 목적).
+	 */
+	@Transactional
+	public boolean notifyWeeklyReportReminderIfNeeded(Project project, User recipient, LocalDateTime weekRangeStart,
+			LocalDateTime weekRangeEndExclusive) {
+		boolean alreadyNotified = notificationRepository.existsByRecipient_IdAndTypeAndCreatedAtBetween(
+				recipient.getId(), NotificationType.WEEKLY_REPORT_REMINDER, weekRangeStart, weekRangeEndExclusive);
+		if (alreadyNotified) {
+			return false;
+		}
+		notifyWeeklyReportReminder(project, recipient);
+		return true;
 	}
 }

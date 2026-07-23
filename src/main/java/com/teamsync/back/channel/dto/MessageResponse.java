@@ -19,7 +19,9 @@ public record MessageResponse(
 		MessageType messageType,
 		LocalDateTime createdAt,
 		boolean pinned,
-		LocalDateTime pinnedAt
+		LocalDateTime pinnedAt,
+		boolean highlighted,
+		LocalDateTime highlightedAt
 ) {
 	public static MessageResponse from(Message message) {
 		return new MessageResponse(
@@ -31,6 +33,8 @@ public record MessageResponse(
 				message.getMessageType(),
 				message.getCreatedAt(),
 				message.isPinned(),
-				message.getPinnedAt());
+				message.getPinnedAt(),
+				message.isHighlighted(),
+				message.getHighlightedAt());
 	}
 }
