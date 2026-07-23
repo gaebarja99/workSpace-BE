@@ -65,12 +65,14 @@ public class AuthService {
 		return issueToken(user);
 	}
 
+	@Transactional(readOnly = true)
 	public UserSummary getCurrentUser(AuthenticatedUser principal) {
 		User user = userRepository.findById(principal.userId())
 				.orElseThrow(InvalidCredentialsException::new);
 		return UserSummary.from(user);
 	}
 
+	@Transactional(readOnly = true)
 	public TokenResponse login(LoginRequest request) {
 		String email = request.email().trim().toLowerCase();
 		User user = userRepository.findByEmail(email)
