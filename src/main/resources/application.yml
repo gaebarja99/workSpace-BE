@@ -42,6 +42,21 @@ teamsync:
     access-token-expiration-ms: ${JWT_EXPIRATION_MS:3600000} # 1시간
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  # FR-002 SSO(Google/Microsoft/Mock). 로컬 기본은 전부 비활성(client-id 없음)이며 배포 환경마다
+  # env로 오버라이드한다. enabled 판정: google/microsoft는 client-id+secret 존재, mock은 아래 enabled.
+  sso:
+    google:
+      client-id: ${SSO_GOOGLE_CLIENT_ID:}
+      client-secret: ${SSO_GOOGLE_CLIENT_SECRET:}
+    microsoft:
+      client-id: ${SSO_MICROSOFT_CLIENT_ID:}
+      client-secret: ${SSO_MICROSOFT_CLIENT_SECRET:}
+      tenant: ${SSO_MICROSOFT_TENANT:common}
+    # mock: 외부 provider 없이 전체 플로우를 검증하는 QA E2E 전용. email은 반드시 기존 워크스페이스
+    # 도메인의 이메일이어야 JIT 프로비저닝이 성공한다.
+    mock:
+      enabled: ${SSO_MOCK_ENABLED:false}
+      email: ${SSO_MOCK_EMAIL:}
   # FR-204 파일 아카이브: 현재는 로컬 디스크 저장소만 지원(docker-compose에 S3/오브젝트 스토리지
   # 인프라 없음). 저장 루트 경로만 외부화해 후속에 S3 등으로 교체할 때 이 지점(LocalFileStorageService)만
   # 바꾸면 되도록 한다(PRD 5.1 모듈형 모놀리스, 후속 확장 원칙).
