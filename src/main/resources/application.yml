@@ -18,6 +18,17 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+# 최소한의 actuator 노출만 허용(NFR-보안, 3.6): health 엔드포인트만 열고 상세 정보는
+# 인증된 요청에서만 노출한다(when-authorized). SecurityConfig의 permitAll은 상태 확인용으로 유지.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+
 # FR-002: JWT 발급/검증 설정. local 프로필 기본값은 개발 편의용이며 dev/운영 환경에서는
 # 반드시 JWT_SECRET 환경변수로 오버라이드할 것 (HS256 기준 최소 256bit/32byte 권장)
 teamsync:
