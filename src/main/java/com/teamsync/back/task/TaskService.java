@@ -6,6 +6,7 @@ import com.teamsync.back.common.exception.InvalidAssigneeException;
 import com.teamsync.back.common.exception.InvalidTaskRequestException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
 import com.teamsync.back.common.exception.TaskNotFoundException;
+import com.teamsync.back.notification.NotificationService;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
@@ -22,6 +23,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,13 +40,16 @@ public class TaskService {
 	private final TaskChecklistItemRepository checklistItemRepository;
 	private final ProjectRepository projectRepository;
 	private final UserRepository userRepository;
+	private final NotificationService notificationService;
 
 	public TaskService(TaskRepository taskRepository, TaskChecklistItemRepository checklistItemRepository,
-			ProjectRepository projectRepository, UserRepository userRepository) {
+			ProjectRepository projectRepository, UserRepository userRepository,
+			NotificationService notificationService) {
 		this.taskRepository = taskRepository;
 		this.checklistItemRepository = checklistItemRepository;
 		this.projectRepository = projectRepository;
 		this.userRepository = userRepository;
+		this.notificationService = notificationService;
 	}
 
 	@Transactional
@@ -64,7 +69,10 @@ public class TaskService {
 				createdBy,
 				assignees);
 
-		return TaskResponse.from(taskRepository.save(task));
+		Task savedTask = taskRepository.save(task);
+		// FR-108 트리거 1(TASK_ASSIGNED): 생성 시 지정된 초기 담당자 전원(생성자 본인 제외)에게 알림.
+		notificationService.notifyTaskAssigned(savedTask, savedTask.getAssignees(), principal.userId());
+		return TaskResponse.from(savedTask);
 	}
 
 	@Transactional(readOnly = true)
@@ -103,6 +111,12 @@ public class TaskService {
 	@Transactional
 	public TaskResponse updateTask(AuthenticatedUser principal, Long taskId, TaskUpdateRequest request) {
 		Task task = getTaskInWorkspace(principal, taskId);
+		// FR-108 트리거 2/3을 위해 변경 전 상태/담당자를 먼저 기억해둔다(도메인 메서드가 이전 값을
+		// 남기지 않으므로, diff는 서비스 계층에서 변경 직전에 스냅샷을 떠 계산해야 한다).
+		TaskStatus previousStatus = task.getStatus();
+		Set<Long> previousAssigneeIds = task.getAssignees().stream()
+				.map(User::getId)
+				.collect(Collectors.toSet());
 
 		if (request.title() != null) {
 			String trimmed = request.title().trim();
@@ -119,6 +133,12 @@ public class TaskService {
 		}
 		if (request.status() != null) {
 			task.changeStatus(request.status());
+			// FR-108 트리거 3(TASK_STATUS_CHANGED): 실제로 값이 바뀐 경우에만, 변경 시점의 담당자
+			// 전원(변경을 수행한 principal 본인 제외)에게 알림을 생성한다.
+			if (request.status() != previousStatus) {
+				notificationService.notifyTaskStatusChanged(task, previousStatus, request.status(),
+						principal.userId());
+			}
 		}
 		if (request.startDate() != null) {
 			task.changeStartDate(request.startDate());
@@ -130,7 +150,14 @@ public class TaskService {
 			if (request.assigneeIds().isEmpty()) {
 				throw new InvalidTaskRequestException("담당자는 최소 1명 이상이어야 합니다.");
 			}
-			task.changeAssignees(resolveAssignees(principal, request.assigneeIds()));
+			Set<User> resolvedAssignees = resolveAssignees(principal, request.assigneeIds());
+			task.changeAssignees(resolvedAssignees);
+			// FR-108 트리거 2(TASK_ASSIGNED): 이전 담당자 집합에 없던 "신규 추가분"에게만
+			// 알림을 생성한다(기존 유지분/제거분은 대상 아님).
+			Set<User> newlyAddedAssignees = resolvedAssignees.stream()
+					.filter(user -> !previousAssigneeIds.contains(user.getId()))
+					.collect(Collectors.toCollection(LinkedHashSet::new));
+			notificationService.notifyTaskAssigned(task, newlyAddedAssignees, principal.userId());
 		}
 
 		return TaskResponse.from(task);

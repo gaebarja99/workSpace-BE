@@ -1,5 +1,6 @@
 package com.teamsync.back.task;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -26,4 +27,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 	@EntityGraph(attributePaths = {"assignees", "project"})
 	List<Task> findAllByAssignees_IdAndProject_Workspace_IdAndStatusNotOrderByDueDateAscIdAsc(
 			Long assigneeId, Long workspaceId, TaskStatus excludedStatus);
+
+	// FR-108(마감 임박 배치, US-04): dueDate가 오늘/내일이고 완료(DONE)되지 않은 태스크를 워크스페이스
+	// 전체(배치는 시스템 전역에서 1일 1회 실행)에서 조회한다. 담당자 순회를 위해 assignees를 함께 로딩한다.
+	@EntityGraph(attributePaths = "assignees")
+	List<Task> findAllByDueDateAndStatusNot(LocalDate dueDate, TaskStatus excludedStatus);
 }
