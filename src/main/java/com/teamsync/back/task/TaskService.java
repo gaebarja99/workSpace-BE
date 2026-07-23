@@ -11,12 +11,14 @@ import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
 import com.teamsync.back.task.dto.ChecklistItemResponse;
 import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
+import com.teamsync.back.task.dto.MyTaskResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskResponse;
 import com.teamsync.back.task.dto.TaskSummaryResponse;
 import com.teamsync.back.task.dto.TaskUpdateRequest;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -76,6 +78,26 @@ public class TaskService {
 	@Transactional(readOnly = true)
 	public TaskResponse getTask(AuthenticatedUser principal, Long taskId) {
 		return TaskResponse.from(getTaskInWorkspace(principal, taskId));
+	}
+
+	/**
+	 * FR-104(담당자별 대시보드, US-01 "내 업무"): 현재 사용자가 담당자로 지정된, 완료되지 않은
+	 * 태스크를 dueDate ASC(null은 마지막) → priority(URGENT>HIGH>MEDIUM>LOW) → id ASC 순으로 반환한다.
+	 */
+	@Transactional(readOnly = true)
+	public List<MyTaskResponse> listMyTasks(AuthenticatedUser principal) {
+		Comparator<Task> byDueDateThenPriorityThenId = Comparator
+				.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder()))
+				.thenComparing(Task::getPriority)
+				.thenComparing(Task::getId);
+
+		return taskRepository
+				.findAllByAssignees_IdAndProject_Workspace_IdAndStatusNotOrderByDueDateAscIdAsc(
+						principal.userId(), principal.workspaceId(), TaskStatus.DONE)
+				.stream()
+				.sorted(byDueDateThenPriorityThenId)
+				.map(MyTaskResponse::from)
+				.toList();
 	}
 
 	@Transactional

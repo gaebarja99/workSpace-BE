@@ -16,4 +16,14 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 	// (상세 조회 1건에 한해 컬렉션당 추가 SELECT 1회는 허용 가능한 비용).
 	@EntityGraph(attributePaths = "assignees")
 	Optional<Task> findByIdAndProject_Workspace_Id(Long id, Long workspaceId);
+
+	// FR-104(담당자별 대시보드, US-01 "내 업무"): 현재 사용자가 담당자인, 워크스페이스 소속이면서
+	// 완료되지 않은 태스크만 조회한다. assignees(ManyToMany)와 project(ManyToOne)는 서로 다른
+	// 연관관계 타입(1:N이 아닌 N:1)이라 checklistItems 때와 달리 카티전 곱 중복 문제가 없어
+	// 하나의 EntityGraph로 함께 즉시 로딩해도 안전하다(project.name 접근 시 지연 로딩 예외 방지 목적).
+	// dueDate ASC(값이 없으면 마지막)/id ASC까지만 쿼리로 처리하고, priority 2차 정렬은
+	// 서비스 레이어에서 Comparator로 최종 확정한다.
+	@EntityGraph(attributePaths = {"assignees", "project"})
+	List<Task> findAllByAssignees_IdAndProject_Workspace_IdAndStatusNotOrderByDueDateAscIdAsc(
+			Long assigneeId, Long workspaceId, TaskStatus excludedStatus);
 }

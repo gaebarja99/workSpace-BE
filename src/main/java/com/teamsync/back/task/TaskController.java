@@ -4,6 +4,7 @@ import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
 import com.teamsync.back.task.dto.ChecklistItemResponse;
 import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
+import com.teamsync.back.task.dto.MyTaskResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskResponse;
 import com.teamsync.back.task.dto.TaskSummaryResponse;
@@ -48,6 +49,14 @@ public class TaskController {
 	public ResponseEntity<List<TaskSummaryResponse>> list(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long projectId) {
 		return ResponseEntity.ok(taskService.listTasks(principal, projectId));
+	}
+
+	// FR-104(담당자별 대시보드, US-01 "내 업무"): 정적 경로("me")이므로 Spring MVC가
+	// "/api/tasks/{taskId}"보다 이 매핑을 항상 우선 매칭한다(리터럴 경로 세그먼트가 변수 세그먼트보다
+	// 더 구체적인 패턴으로 취급됨). 명시성을 위해 {taskId} 매핑보다 앞서 선언한다.
+	@GetMapping("/api/tasks/me")
+	public ResponseEntity<List<MyTaskResponse>> listMyTasks(@AuthenticationPrincipal AuthenticatedUser principal) {
+		return ResponseEntity.ok(taskService.listMyTasks(principal));
 	}
 
 	@GetMapping("/api/tasks/{taskId}")
