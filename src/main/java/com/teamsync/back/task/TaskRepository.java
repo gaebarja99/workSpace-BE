@@ -3,8 +3,11 @@ package com.teamsync.back.task;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface TaskRepository extends JpaRepository<Task, Long> {
 
@@ -32,4 +35,16 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 	// 전체(배치는 시스템 전역에서 1일 1회 실행)에서 조회한다. 담당자 순회를 위해 assignees를 함께 로딩한다.
 	@EntityGraph(attributePaths = "assignees")
 	List<Task> findAllByDueDateAndStatusNot(LocalDate dueDate, TaskStatus excludedStatus);
+
+	// FR-004(통합 검색): title 또는 description에 키워드가 포함된 태스크를 워크스페이스 범위로 조회한다.
+	// title/description OR 조건에 대소문자 무시 파생 쿼리명을 쓰면 지나치게 길어져(project.workspace.id를
+	// 두 번 반복) @Query(JPQL)로 작성한다. project를 JOIN FETCH해 응답의 projectName 조립 시 N+1을 피한다.
+	// keyword는 호출부에서 LIKE 와일드카드(%, _)를 이스케이프해 넘겨야 한다(ESCAPE '\' 사용).
+	@Query("SELECT t FROM Task t JOIN FETCH t.project p "
+			+ "WHERE p.workspace.id = :workspaceId "
+			+ "AND (LOWER(t.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\' "
+			+ "OR LOWER(t.description) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\') "
+			+ "ORDER BY t.createdAt DESC, t.id DESC")
+	List<Task> searchByWorkspace(@Param("workspaceId") Long workspaceId, @Param("keyword") String keyword,
+			Pageable pageable);
 }
