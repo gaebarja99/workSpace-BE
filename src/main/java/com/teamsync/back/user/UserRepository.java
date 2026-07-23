@@ -21,6 +21,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	// 멤버십 테이블이 없으므로 "프로젝트 멤버" = "해당 워크스페이스 전체 User"로 조회한다.
 	List<User> findAllByWorkspaceIdOrderByNameAsc(Long workspaceId);
 
+	// FR-206(DM 상대 목록, GET /api/dm/contacts): 워크스페이스 내 전체 사용자 중 호출자 본인만 제외한다.
+	List<User> findAllByWorkspaceIdAndIdNotOrderByNameAsc(Long workspaceId, Long excludedUserId);
+
 	// FR-004(통합 검색): name 또는 email에 키워드가 포함된 사용자를 워크스페이스 범위로 조회한다.
 	// keyword는 호출부에서 LIKE 와일드카드(%, _)를 이스케이프해 넘겨야 한다(ESCAPE '\' 사용).
 	@Query("SELECT u FROM User u WHERE u.workspace.id = :workspaceId "
