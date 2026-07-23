@@ -13,3 +13,6 @@ out/
 # env
 .env
 *.log
+
+# FR-204 로컬 파일 아카이브 저장소(개발용 기본 경로). 운영에서는 STORAGE_LOCAL_PATH로 오버라이드.
+data/

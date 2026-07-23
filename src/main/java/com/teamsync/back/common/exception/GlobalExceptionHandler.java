@@ -12,6 +12,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * 공통 예외 처리. Spring Security 필터 체인(FilterSecurityInterceptor) 단계에서 발생하는
@@ -55,6 +56,15 @@ public class GlobalExceptionHandler {
 		}
 		return ResponseEntity.status(HttpStatus.FORBIDDEN)
 				.body(ErrorResponse.of(HttpStatus.FORBIDDEN.value(), "ACCESS_DENIED", "권한이 없습니다.", request.getRequestURI()));
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex,
+			HttpServletRequest request) {
+		log.warn("MaxUploadSizeExceededException: {}", ex.getMessage());
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+				.body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "FILE_TOO_LARGE",
+						"업로드 파일 크기가 허용된 최대 용량(20MB)을 초과했습니다.", request.getRequestURI()));
 	}
 
 	@ExceptionHandler(Exception.class)
