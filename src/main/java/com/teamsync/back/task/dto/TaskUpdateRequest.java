@@ -25,6 +25,9 @@ public record TaskUpdateRequest(
 
 		LocalDate dueDate,
 
-		List<Long> assigneeIds
+		List<Long> assigneeIds,
+
+		// FR-302(US-09): 태스크 생성/상태변경/완료 시 채널 시스템 메시지 자동 게시 on/off 토글. null이면 변경하지 않는다.
+		Boolean channelNotificationsEnabled
 ) {
 }

@@ -16,6 +16,7 @@ import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -123,6 +124,29 @@ public class ChannelService {
 		return MessageResponse.from(message);
 	}
 
+	/**
+	 * FR-302: task.channelNotificationsEnabled가 켜져 있고 TaskMessageLink가 없는 태스크의 시스템 메시지
+	 * 게시 대상을 찾을 때 사용(F2에서 구현된 프로젝트 기본 채널 "general" 조회 로직 재사용).
+	 * general 채널이 아직 없으면(예: listChannels가 한 번도 호출되지 않은 신규 프로젝트) 빈 Optional을
+	 * 반환하며, 호출자는 이 경우 조용히 건너뛰어야 한다(예외를 던지지 않음).
+	 */
+	@Transactional(readOnly = true)
+	public Optional<Channel> findDefaultChannel(Long projectId) {
+		return channelRepository.findFirstByProject_IdAndNameOrderByIdAsc(projectId, DEFAULT_CHANNEL_NAME);
+	}
+
+	/**
+	 * FR-301(US-09): 메시지를 태스크로 전환할 때 TaskService가 channelId/messageId의 워크스페이스 소속
+	 * 여부를 재검증하기 위해 재사용하는 조회. 다른 워크스페이스 데이터는 존재 자체가 노출되지 않도록
+	 * 404로 응답한다(PRD 5.6 리스크 대응).
+	 */
+	@Transactional(readOnly = true)
+	public Message getMessageInChannel(AuthenticatedUser principal, Long channelId, Long messageId) {
+		getChannelInWorkspace(principal, channelId);
+		return messageRepository.findByIdAndChannel_Id(messageId, channelId)
+				.orElseThrow(MessageNotFoundException::new);
+	}
+
 	private Project getProjectInWorkspace(AuthenticatedUser principal, Long projectId) {
 		return projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
 				.orElseThrow(ProjectNotFoundException::new);
@@ -131,12 +155,6 @@ public class ChannelService {
 	private Channel getChannelInWorkspace(AuthenticatedUser principal, Long channelId) {
 		return channelRepository.findByIdAndProject_Workspace_Id(channelId, principal.workspaceId())
 				.orElseThrow(ChannelNotFoundException::new);
-	}
-
-	private Message getMessageInChannel(AuthenticatedUser principal, Long channelId, Long messageId) {
-		getChannelInWorkspace(principal, channelId);
-		return messageRepository.findByIdAndChannel_Id(messageId, channelId)
-				.orElseThrow(MessageNotFoundException::new);
 	}
 
 	private Message resolveParentMessage(Long channelId, Long parentMessageId) {

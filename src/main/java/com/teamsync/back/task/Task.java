@@ -85,6 +85,11 @@ public class Task extends BaseTimeEntity {
 	@OrderBy("position ASC, id ASC")
 	private List<TaskChecklistItem> checklistItems = new ArrayList<>();
 
+	// FR-302(US-09/10): 태스크 생성/상태변경/완료 시 채널에 시스템 메시지를 자동 게시할지 여부(on/off 토글).
+	// PATCH /api/tasks/{taskId}로 변경 가능하며, 기본값은 true(항상 알린다)다.
+	@Column(name = "channel_notifications_enabled", nullable = false)
+	private boolean channelNotificationsEnabled = true;
+
 	public Task(Project project, String title, String description, TaskPriority priority, TaskStatus status,
 			LocalDate startDate, LocalDate dueDate, User createdBy, Set<User> assignees) {
 		this.project = project;
@@ -125,5 +130,9 @@ public class Task extends BaseTimeEntity {
 	public void changeAssignees(Set<User> assignees) {
 		this.assignees.clear();
 		this.assignees.addAll(assignees);
+	}
+
+	public void changeChannelNotificationsEnabled(boolean channelNotificationsEnabled) {
+		this.channelNotificationsEnabled = channelNotificationsEnabled;
 	}
 }

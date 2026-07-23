@@ -5,6 +5,9 @@ import com.teamsync.back.channel.dto.ChannelCreateRequest;
 import com.teamsync.back.channel.dto.ChannelResponse;
 import com.teamsync.back.channel.dto.MessageCreateRequest;
 import com.teamsync.back.channel.dto.MessageResponse;
+import com.teamsync.back.task.TaskService;
+import com.teamsync.back.task.dto.ConvertToTaskRequest;
+import com.teamsync.back.task.dto.TaskResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -19,17 +22,22 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * FR-201(채널/토픽) / FR-202(실시간 메시징 — 이번 스코프는 REST + 프론트 폴링으로 근사, WebSocket은 후속 과제) API.
+ * FR-201(채널/토픽) / FR-202(실시간 메시징 — 이번 스코프는 REST + 프론트 폴링으로 근사, WebSocket은 후속 과제) /
+ * FR-301(메시지→태스크 전환, US-09) API.
  * 조회(GET)는 인증된 워크스페이스 구성원이면 GUEST를 포함해 누구나 가능하고,
  * 생성(POST)은 TaskController/ProjectController와 동일하게 GUEST를 제외한 ADMIN/LEADER/MEMBER만 가능하다.
+ * 태스크 전환(convert-to-task)은 Task 도메인 로직(TaskService)에 위임한다(엔드포인트 경로만 채널
+ * 컨텍스트에 속함).
  */
 @RestController
 public class ChannelController {
 
 	private final ChannelService channelService;
+	private final TaskService taskService;
 
-	public ChannelController(ChannelService channelService) {
+	public ChannelController(ChannelService channelService, TaskService taskService) {
 		this.channelService = channelService;
+		this.taskService = taskService;
 	}
 
 	@GetMapping("/api/projects/{projectId}/channels")
@@ -74,5 +82,16 @@ public class ChannelController {
 	public ResponseEntity<MessageResponse> unpinMessage(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long channelId, @PathVariable Long messageId) {
 		return ResponseEntity.ok(channelService.unpinMessage(principal, channelId, messageId));
+	}
+
+	// FR-301(메시지→태스크 전환, US-09): "팀원으로서" 즉시 전환하므로 메시지 작성과 동일하게
+	// GUEST만 제외한 ADMIN/LEADER/MEMBER 전원 허용(핀보다 넓은 권한, 계약 문서 참고).
+	@PostMapping("/api/channels/{channelId}/messages/{messageId}/convert-to-task")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	public ResponseEntity<TaskResponse> convertToTask(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long channelId, @PathVariable Long messageId,
+			@Valid @RequestBody ConvertToTaskRequest request) {
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(taskService.convertMessageToTask(principal, channelId, messageId, request));
 	}
 }

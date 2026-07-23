@@ -1,6 +1,7 @@
 package com.teamsync.back.project;
 
 import com.teamsync.back.auth.AuthenticatedUser;
+import com.teamsync.back.project.dto.MemberSummaryResponse;
 import com.teamsync.back.project.dto.ProjectCreateRequest;
 import com.teamsync.back.project.dto.ProjectResponse;
 import jakarta.validation.Valid;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,5 +41,12 @@ public class ProjectController {
 	@GetMapping
 	public ResponseEntity<List<ProjectResponse>> list(@AuthenticationPrincipal AuthenticatedUser principal) {
 		return ResponseEntity.ok(projectService.listProjects(principal));
+	}
+
+	// FR-301 담당자 선택용 선행 요구사항: 조회 전용이라 GUEST를 포함해 인증된 누구나 호출 가능하다.
+	@GetMapping("/{projectId}/members")
+	public ResponseEntity<List<MemberSummaryResponse>> listMembers(
+			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long projectId) {
+		return ResponseEntity.ok(projectService.listMembers(principal, projectId));
 	}
 }
