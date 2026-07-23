@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,5 +58,21 @@ public class ChannelController {
 			@PathVariable Long channelId, @Valid @RequestBody MessageCreateRequest request) {
 		return ResponseEntity.status(HttpStatus.CREATED)
 				.body(channelService.createMessage(principal, channelId, request));
+	}
+
+	// FR-203(메시지 고정, US-07): "팀장으로서 공지를 고정"이므로 일반 MEMBER/GUEST는 고정할 수 없고
+	// ADMIN/LEADER만 가능하다(메시지 작성은 MEMBER도 가능한 것과 의도적으로 다른 제약).
+	@PostMapping("/api/channels/{channelId}/messages/{messageId}/pin")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
+	public ResponseEntity<MessageResponse> pinMessage(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long channelId, @PathVariable Long messageId) {
+		return ResponseEntity.ok(channelService.pinMessage(principal, channelId, messageId));
+	}
+
+	@DeleteMapping("/api/channels/{channelId}/messages/{messageId}/pin")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
+	public ResponseEntity<MessageResponse> unpinMessage(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long channelId, @PathVariable Long messageId) {
+		return ResponseEntity.ok(channelService.unpinMessage(principal, channelId, messageId));
 	}
 }

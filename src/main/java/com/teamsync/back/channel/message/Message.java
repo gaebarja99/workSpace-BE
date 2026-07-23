@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -47,10 +48,29 @@ public class Message extends BaseTimeEntity {
 	@JoinColumn(name = "parent_message_id")
 	private Message parentMessage;
 
+	@Column(nullable = false)
+	private boolean pinned = false;
+
+	@Column(name = "pinned_at")
+	private LocalDateTime pinnedAt;
+
 	public Message(Channel channel, User author, String content, Message parentMessage) {
 		this.channel = channel;
 		this.author = author;
 		this.content = content;
 		this.parentMessage = parentMessage;
+	}
+
+	/**
+	 * FR-203(메시지 고정, US-07): 팀장/관리자가 공지성 메시지를 채널 상단에 고정한다.
+	 */
+	public void pin() {
+		this.pinned = true;
+		this.pinnedAt = LocalDateTime.now();
+	}
+
+	public void unpin() {
+		this.pinned = false;
+		this.pinnedAt = null;
 	}
 }

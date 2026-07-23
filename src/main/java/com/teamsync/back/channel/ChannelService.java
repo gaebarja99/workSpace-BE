@@ -9,6 +9,7 @@ import com.teamsync.back.channel.message.Message;
 import com.teamsync.back.channel.message.MessageRepository;
 import com.teamsync.back.common.exception.ChannelNotFoundException;
 import com.teamsync.back.common.exception.InvalidMessageRequestException;
+import com.teamsync.back.common.exception.MessageNotFoundException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
@@ -95,6 +96,33 @@ public class ChannelService {
 		return MessageResponse.from(message);
 	}
 
+	/**
+	 * FR-203(메시지 고정, US-07): ADMIN/LEADER만 호출 가능(컨트롤러 @PreAuthorize에서 제어).
+	 * channelId가 요청자 워크스페이스 소속인지, messageId가 그 채널에 실제로 속하는지 모두 검증한다.
+	 */
+	@Transactional
+	public MessageResponse pinMessage(AuthenticatedUser principal, Long channelId, Long messageId) {
+		Message message = getMessageInChannel(principal, channelId, messageId);
+		if (message.getParentMessage() != null) {
+			throw new InvalidMessageRequestException("스레드 답글은 고정할 수 없습니다.");
+		}
+		message.pin();
+		return MessageResponse.from(message);
+	}
+
+	/**
+	 * unpinMessage는 답글 여부를 검증하지 않는다. pinMessage에서 답글 고정을 원천 차단했으므로
+	 * 정상 흐름에서는 답글이 pinned=true가 될 수 없어 고아 상태 자체가 재발하지 않는다. 오히려
+	 * 여기서도 답글을 막으면, 과거 데이터(마이그레이션/수동 조작 등)로 이미 고아 상태가 된 답글이
+	 * 있을 때 API로 복구할 유일한 통로까지 막아버리므로 의도적으로 제한을 두지 않는다.
+	 */
+	@Transactional
+	public MessageResponse unpinMessage(AuthenticatedUser principal, Long channelId, Long messageId) {
+		Message message = getMessageInChannel(principal, channelId, messageId);
+		message.unpin();
+		return MessageResponse.from(message);
+	}
+
 	private Project getProjectInWorkspace(AuthenticatedUser principal, Long projectId) {
 		return projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
 				.orElseThrow(ProjectNotFoundException::new);
@@ -103,6 +131,12 @@ public class ChannelService {
 	private Channel getChannelInWorkspace(AuthenticatedUser principal, Long channelId) {
 		return channelRepository.findByIdAndProject_Workspace_Id(channelId, principal.workspaceId())
 				.orElseThrow(ChannelNotFoundException::new);
+	}
+
+	private Message getMessageInChannel(AuthenticatedUser principal, Long channelId, Long messageId) {
+		getChannelInWorkspace(principal, channelId);
+		return messageRepository.findByIdAndChannel_Id(messageId, channelId)
+				.orElseThrow(MessageNotFoundException::new);
 	}
 
 	private Message resolveParentMessage(Long channelId, Long parentMessageId) {

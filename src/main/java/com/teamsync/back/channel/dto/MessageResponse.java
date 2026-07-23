@@ -13,7 +13,9 @@ public record MessageResponse(
 		Long parentMessageId,
 		String content,
 		MessageAuthorResponse author,
-		LocalDateTime createdAt
+		LocalDateTime createdAt,
+		boolean pinned,
+		LocalDateTime pinnedAt
 ) {
 	public static MessageResponse from(Message message) {
 		return new MessageResponse(
@@ -22,6 +24,8 @@ public record MessageResponse(
 				message.getParentMessage() != null ? message.getParentMessage().getId() : null,
 				message.getContent(),
 				MessageAuthorResponse.from(message.getAuthor()),
-				message.getCreatedAt());
+				message.getCreatedAt(),
+				message.isPinned(),
+				message.getPinnedAt());
 	}
 }
