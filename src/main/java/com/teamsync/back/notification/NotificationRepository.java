@@ -8,14 +8,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
-	// GET /api/notifications/me: 최대 50건, createdAt DESC. 목록 응답에 taskId/projectId를
-	// 채우기 위해 task와 task.project까지 함께 즉시 로딩한다(N+1 방지).
-	@EntityGraph(attributePaths = {"task", "task.project"})
+	// GET /api/notifications/me: 최대 50건, createdAt DESC. 목록 응답에 taskId/projectId/channelId/messageId를
+	// 채우기 위해 task(+project)와 멘션 딥링크(channel+project, message)까지 함께 즉시 로딩한다(N+1 방지).
+	@EntityGraph(attributePaths = {"task", "task.project", "channel", "channel.project", "linkedMessage"})
 	List<Notification> findTop50ByRecipient_IdOrderByCreatedAtDesc(Long recipientId);
 
 	long countByRecipient_IdAndReadFalse(Long recipientId);
 
-	@EntityGraph(attributePaths = {"task", "task.project"})
+	@EntityGraph(attributePaths = {"task", "task.project", "channel", "channel.project", "linkedMessage"})
 	Optional<Notification> findByIdAndRecipient_Id(Long id, Long recipientId);
 
 	List<Notification> findAllByRecipient_IdAndReadFalse(Long recipientId);

@@ -1,5 +1,7 @@
 package com.teamsync.back.notification;
 
+import com.teamsync.back.channel.Channel;
+import com.teamsync.back.channel.message.Message;
 import com.teamsync.back.common.BaseTimeEntity;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.user.User;
@@ -50,6 +52,16 @@ public class Notification extends BaseTimeEntity {
 	@JoinColumn(name = "task_id")
 	private Task task;
 
+	// FR-105-A/FR-202-A(멘션 딥링크): 메시지 멘션 알림은 채널/메시지로 이동하는 딥링크 참조를 함께 남긴다.
+	// task와 마찬가지로 원본이 나중에 삭제되어도 알림 이력은 보존해야 하므로 nullable(ON DELETE SET NULL)이다.
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "channel_id")
+	private Channel channel;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "message_id")
+	private Message linkedMessage;
+
 	@Column(name = "is_read", nullable = false)
 	private boolean read;
 
@@ -62,6 +74,25 @@ public class Notification extends BaseTimeEntity {
 		this.message = message;
 		this.task = task;
 		this.read = false;
+	}
+
+	/**
+	 * FR-105-A: 태스크 댓글 멘션 알림. task 딥링크만 채우며 channel/message 딥링크는 두지 않는다.
+	 */
+	public static Notification forTaskMention(User recipient, String message, Task task) {
+		return new Notification(recipient, NotificationType.MENTION, message, task);
+	}
+
+	/**
+	 * FR-202-A: 메시지 멘션 알림. channel_id + message_id 딥링크를 함께 채워 프론트가 해당 메시지로
+	 * 이동할 수 있게 한다(task 딥링크는 없음).
+	 */
+	public static Notification forMessageMention(User recipient, String message, Channel channel,
+			Message linkedMessage) {
+		Notification notification = new Notification(recipient, NotificationType.MENTION, message, null);
+		notification.channel = channel;
+		notification.linkedMessage = linkedMessage;
+		return notification;
 	}
 
 	public void markAsRead() {

@@ -4,7 +4,9 @@ import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.channel.dto.ChannelCreateRequest;
 import com.teamsync.back.channel.dto.ChannelResponse;
 import com.teamsync.back.channel.dto.MessageCreateRequest;
+import com.teamsync.back.channel.dto.MessageReactionSummary;
 import com.teamsync.back.channel.dto.MessageResponse;
+import com.teamsync.back.channel.dto.ReactionRequest;
 import com.teamsync.back.task.TaskService;
 import com.teamsync.back.task.dto.ConvertToTaskRequest;
 import com.teamsync.back.task.dto.TaskResponse;
@@ -98,6 +100,16 @@ public class ChannelController {
 	public ResponseEntity<MessageResponse> unhighlightMessage(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long channelId, @PathVariable Long messageId) {
 		return ResponseEntity.ok(channelService.unhighlightMessage(principal, channelId, messageId));
+	}
+
+	// FR-202-B(이모지 반응, 토글): 메시지 작성과 동일한 write 권한(ADMIN/LEADER/MEMBER)으로 제한한다.
+	// 응답은 토글 반영 후 해당 메시지의 전체 반응 집계다.
+	@PostMapping("/api/channels/{channelId}/messages/{messageId}/reactions")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	public ResponseEntity<List<MessageReactionSummary>> toggleReaction(
+			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long channelId,
+			@PathVariable Long messageId, @Valid @RequestBody ReactionRequest request) {
+		return ResponseEntity.ok(channelService.toggleReaction(principal, channelId, messageId, request));
 	}
 
 	// FR-301(메시지→태스크 전환, US-09): "팀원으로서" 즉시 전환하므로 메시지 작성과 동일하게

@@ -1,6 +1,8 @@
 package com.teamsync.back.notification;
 
 import com.teamsync.back.auth.AuthenticatedUser;
+import com.teamsync.back.channel.Channel;
+import com.teamsync.back.channel.message.Message;
 import com.teamsync.back.common.exception.NotificationNotFoundException;
 import com.teamsync.back.notification.dto.NotificationResponse;
 import com.teamsync.back.project.Project;
@@ -11,7 +13,9 @@ import com.teamsync.back.user.User;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -91,6 +95,53 @@ public class NotificationService {
 			}
 			notificationRepository.save(new Notification(assignee, NotificationType.TASK_STATUS_CHANGED, message, task));
 		}
+	}
+
+	/**
+	 * FR-105-A(태스크 댓글 @멘션): 댓글에서 언급된 수신자 전원에게 MENTION 알림을 생성한다. 본인(actingUserId)은
+	 * 제외하고, 같은 수신자가 중복 전달되어도 1건만 만든다. 딥링크는 task(댓글이 달린 태스크)로 건다.
+	 * 호출자(TaskService.createTaskComment)가 이미 워크스페이스 소속만 걸러 recipients로 넘긴다.
+	 */
+	@Transactional
+	public void notifyTaskCommentMentioned(Task task, User actor, Collection<User> recipients, String content,
+			Long actingUserId) {
+		String actorName = actor != null ? actor.getName() : "시스템";
+		String message = actorName + "님이 회원님을 언급했습니다: " + snippet(content);
+		Set<Long> notified = new HashSet<>();
+		for (User recipient : recipients) {
+			if (recipient.getId().equals(actingUserId) || !notified.add(recipient.getId())) {
+				continue;
+			}
+			notificationRepository.save(Notification.forTaskMention(recipient, message, task));
+		}
+	}
+
+	/**
+	 * FR-202-A(메시지 @멘션): 메시지에서 언급된 수신자(개별 멘션 + @전체 대상)에게 MENTION 알림을 생성한다.
+	 * 본인(actingUserId) 제외, 수신자 중복 제거. 딥링크는 channel_id + message_id로 건다.
+	 */
+	@Transactional
+	public void notifyMessageMentioned(Message message, Collection<User> recipients, Long actingUserId) {
+		String actorName = message.getAuthor() != null ? message.getAuthor().getName() : "시스템";
+		String notificationMessage = actorName + "님이 회원님을 언급했습니다: " + snippet(message.getContent());
+		Channel channel = message.getChannel();
+		Set<Long> notified = new HashSet<>();
+		for (User recipient : recipients) {
+			if (recipient.getId().equals(actingUserId) || !notified.add(recipient.getId())) {
+				continue;
+			}
+			notificationRepository.save(
+					Notification.forMessageMention(recipient, notificationMessage, channel, message));
+		}
+	}
+
+	/** 멘션 알림 문구용: 내용 앞 40자만 남기고, 잘렸으면 말줄임표를 붙인다. */
+	private static String snippet(String content) {
+		String trimmed = content == null ? "" : content.trim();
+		if (trimmed.length() <= 40) {
+			return trimmed;
+		}
+		return trimmed.substring(0, 40) + "…";
 	}
 
 	/**

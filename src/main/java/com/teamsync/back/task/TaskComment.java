@@ -9,9 +9,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -45,13 +49,22 @@ public class TaskComment {
 	@Column(nullable = false, columnDefinition = "TEXT")
 	private String content;
 
+	// FR-105-A: 이 댓글에서 언급된(워크스페이스 소속) 사용자. Task.assignees와 동일하게 단방향 ManyToMany로 관리한다.
+	@ManyToMany(fetch = FetchType.LAZY)
+	@JoinTable(
+			name = "task_comment_mentions",
+			joinColumns = @JoinColumn(name = "task_comment_id"),
+			inverseJoinColumns = @JoinColumn(name = "user_id"))
+	private Set<User> mentionedUsers = new LinkedHashSet<>();
+
 	@CreatedDate
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
-	public TaskComment(Task task, User author, String content) {
+	public TaskComment(Task task, User author, String content, Set<User> mentionedUsers) {
 		this.task = task;
 		this.author = author;
 		this.content = content;
+		this.mentionedUsers = new LinkedHashSet<>(mentionedUsers);
 	}
 }

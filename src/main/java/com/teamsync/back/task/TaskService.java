@@ -24,6 +24,7 @@ import com.teamsync.back.task.dto.ChecklistItemResponse;
 import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
 import com.teamsync.back.task.dto.ConvertToTaskRequest;
 import com.teamsync.back.task.dto.MyTaskResponse;
+import com.teamsync.back.task.dto.TaskActivityResponse;
 import com.teamsync.back.task.dto.TaskCommentRequest;
 import com.teamsync.back.task.dto.TaskCommentResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
@@ -58,6 +59,8 @@ public class TaskService {
 	private final ProjectRepository projectRepository;
 	private final UserRepository userRepository;
 	private final NotificationService notificationService;
+	private final TaskActivityService taskActivityService;
+	private final TaskActivityRepository taskActivityRepository;
 	private final TaskMessageLinkRepository taskMessageLinkRepository;
 	private final TaskFileLinkRepository taskFileLinkRepository;
 	private final TaskCommentRepository taskCommentRepository;
@@ -67,7 +70,8 @@ public class TaskService {
 
 	public TaskService(TaskRepository taskRepository, TaskChecklistItemRepository checklistItemRepository,
 			ProjectRepository projectRepository, UserRepository userRepository,
-			NotificationService notificationService, TaskMessageLinkRepository taskMessageLinkRepository,
+			NotificationService notificationService, TaskActivityService taskActivityService,
+			TaskActivityRepository taskActivityRepository, TaskMessageLinkRepository taskMessageLinkRepository,
 			TaskFileLinkRepository taskFileLinkRepository, TaskCommentRepository taskCommentRepository,
 			ArchivedFileRepository archivedFileRepository, MessageRepository messageRepository,
 			ChannelService channelService) {
@@ -76,6 +80,8 @@ public class TaskService {
 		this.projectRepository = projectRepository;
 		this.userRepository = userRepository;
 		this.notificationService = notificationService;
+		this.taskActivityService = taskActivityService;
+		this.taskActivityRepository = taskActivityRepository;
 		this.taskMessageLinkRepository = taskMessageLinkRepository;
 		this.taskFileLinkRepository = taskFileLinkRepository;
 		this.taskCommentRepository = taskCommentRepository;
@@ -102,6 +108,8 @@ public class TaskService {
 				assignees);
 
 		Task savedTask = taskRepository.save(task);
+		// FR-105-B: 태스크 생성 활동 기록(actor=생성자).
+		taskActivityService.recordCreated(savedTask, createdBy);
 		// FR-108 트리거 1(TASK_ASSIGNED): 생성 시 지정된 초기 담당자 전원(생성자 본인 제외)에게 알림.
 		notificationService.notifyTaskAssigned(savedTask, savedTask.getAssignees(), principal.userId());
 		// FR-302: 일반 생성 태스크는 TaskMessageLink가 없으므로 프로젝트 기본(general) 채널에 게시된다.
@@ -137,6 +145,8 @@ public class TaskService {
 
 		TaskMessageLink link = taskMessageLinkRepository.save(new TaskMessageLink(savedTask, message));
 
+		// FR-105-B: 메시지 전환으로 생성된 태스크도 생성 활동을 기록한다(actor=전환을 수행한 사용자).
+		taskActivityService.recordCreated(savedTask, createdBy);
 		notificationService.notifyTaskAssigned(savedTask, savedTask.getAssignees(), principal.userId());
 		// FR-302: TaskMessageLink가 이미 만들어졌으므로(위 라인) resolveNotificationChannel이 이 메시지의
 		// 채널을 찾아 같은 채널에 "새 태스크가 생성되었습니다" 시스템 메시지를 게시한다.
@@ -209,6 +219,9 @@ public class TaskService {
 			if (request.status() != previousStatus) {
 				notificationService.notifyTaskStatusChanged(task, previousStatus, request.status(),
 						principal.userId());
+				// FR-105-B: 상태 변경 활동 기록(detail 예: "진행 중 → 검토").
+				taskActivityService.recordStatusChanged(task, previousStatus, request.status(),
+						userRepository.getReferenceById(principal.userId()));
 				// FR-302: 완료(DONE)로의 변경은 전용 완료 메시지만 게시하고, 그 외 상태 변경은 일반
 				// 상태 변경 메시지를 게시한다(중복 게시 금지).
 				publishTaskStatusChangedMessage(task, request.status());
@@ -232,6 +245,12 @@ public class TaskService {
 					.filter(user -> !previousAssigneeIds.contains(user.getId()))
 					.collect(Collectors.toCollection(LinkedHashSet::new));
 			notificationService.notifyTaskAssigned(task, newlyAddedAssignees, principal.userId());
+			// FR-105-B: 담당자 집합이 실제로 바뀐 경우에만 활동을 기록한다(변경 없는 재지정은 로그 남기지 않음).
+			Set<Long> resolvedAssigneeIds = resolvedAssignees.stream().map(User::getId).collect(Collectors.toSet());
+			if (!resolvedAssigneeIds.equals(previousAssigneeIds)) {
+				taskActivityService.recordAssigneeChanged(task, resolvedAssignees,
+						userRepository.getReferenceById(principal.userId()));
+			}
 		}
 		if (request.channelNotificationsEnabled() != null) {
 			task.changeChannelNotificationsEnabled(request.channelNotificationsEnabled());
@@ -345,8 +364,10 @@ public class TaskService {
 			throw new InvalidTaskRequestException("댓글 내용은 공백일 수 없습니다.");
 		}
 		User author = userRepository.getReferenceById(principal.userId());
+		// FR-105-A: 언급 대상 중 워크스페이스 소속인 사용자만 남긴다(그 외 id는 무시). content는 원문 그대로 저장.
+		Set<User> mentionedUsers = resolveMentionedUsers(principal, request.mentionedUserIds());
 
-		TaskComment comment = taskCommentRepository.save(new TaskComment(task, author, content));
+		TaskComment comment = taskCommentRepository.save(new TaskComment(task, author, content, mentionedUsers));
 
 		taskMessageLinkRepository.findByTaskId(taskId).ifPresent(link -> {
 			Message parentMessage = link.getMessage();
@@ -354,7 +375,22 @@ public class TaskService {
 					Message.createTaskCommentSync(parentMessage.getChannel(), author, content, parentMessage));
 		});
 
+		// FR-105-A: 언급된 사용자(본인 제외/중복 제거)에게 MENTION 알림(task 딥링크). 동일 트랜잭션.
+		notificationService.notifyTaskCommentMentioned(task, author, mentionedUsers, content, principal.userId());
+		// FR-105-B: 댓글 작성 활동 기록.
+		taskActivityService.recordCommentAdded(task, author);
+
 		return TaskCommentResponse.from(comment);
+	}
+
+	// ----- FR-105-B(US-01): 태스크 활동 로그 조회 -----
+
+	@Transactional(readOnly = true)
+	public List<TaskActivityResponse> listTaskActivities(AuthenticatedUser principal, Long taskId) {
+		getTaskInWorkspace(principal, taskId);
+		return taskActivityRepository.findByTaskIdOrderByCreatedAtAscIdAsc(taskId).stream()
+				.map(TaskActivityResponse::from)
+				.toList();
 	}
 
 	// ----- FR-302: 태스크 생성/상태변경/완료 시 채널 시스템 메시지 자동 게시 -----
@@ -429,5 +465,18 @@ public class TaskService {
 			throw new InvalidAssigneeException();
 		}
 		return new LinkedHashSet<>(users);
+	}
+
+	/**
+	 * FR-105-A: 댓글 mentionedUserIds 중 요청자의 워크스페이스에 실제로 속한 사용자만 남긴다(그 외 id는 조용히 무시).
+	 * 담당자 해석(resolveAssignees)과 달리 존재하지 않는 id가 섞여도 예외를 던지지 않는다(멘션은 best-effort).
+	 */
+	private Set<User> resolveMentionedUsers(AuthenticatedUser principal, List<Long> mentionedUserIds) {
+		if (mentionedUserIds == null || mentionedUserIds.isEmpty()) {
+			return new LinkedHashSet<>();
+		}
+		Set<Long> distinctIds = new LinkedHashSet<>(mentionedUserIds);
+		distinctIds.remove(principal.userId()); // 작성자 자기 자신 멘션은 목록/알림 모두에서 제외
+		return new LinkedHashSet<>(userRepository.findAllByIdInAndWorkspaceId(distinctIds, principal.workspaceId()));
 	}
 }

@@ -5,6 +5,7 @@ import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
 import com.teamsync.back.task.dto.ChecklistItemResponse;
 import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
 import com.teamsync.back.task.dto.MyTaskResponse;
+import com.teamsync.back.task.dto.TaskActivityResponse;
 import com.teamsync.back.task.dto.TaskCommentRequest;
 import com.teamsync.back.task.dto.TaskCommentResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
@@ -144,5 +145,12 @@ public class TaskController {
 			@PathVariable Long taskId, @Valid @RequestBody TaskCommentRequest request) {
 		return ResponseEntity.status(HttpStatus.CREATED)
 				.body(taskService.createTaskComment(principal, taskId, request));
+	}
+
+	// FR-105-B(US-01): 태스크 활동 로그. 조회는 인증된 워크스페이스 구성원이면 누구나 가능하다(createdAt 오름차순).
+	@GetMapping("/api/tasks/{taskId}/activities")
+	public ResponseEntity<List<TaskActivityResponse>> listActivities(
+			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId) {
+		return ResponseEntity.ok(taskService.listTaskActivities(principal, taskId));
 	}
 }

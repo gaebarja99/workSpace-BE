@@ -3,6 +3,7 @@ package com.teamsync.back.channel.message;
 import com.teamsync.back.channel.Channel;
 import com.teamsync.back.common.BaseTimeEntity;
 import com.teamsync.back.user.User;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,9 +13,16 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -73,6 +81,21 @@ public class Message extends BaseTimeEntity {
 	@Column(name = "highlighted_at")
 	private LocalDateTime highlightedAt;
 
+	// FR-202-A(메시지 @멘션): 이 메시지에서 개별 언급된(워크스페이스 소속) 사용자. mentionEveryone(@전체)과 공존 가능.
+	@ManyToMany(fetch = FetchType.LAZY)
+	@JoinTable(
+			name = "message_mentions",
+			joinColumns = @JoinColumn(name = "message_id"),
+			inverseJoinColumns = @JoinColumn(name = "user_id"))
+	private Set<User> mentionedUsers = new LinkedHashSet<>();
+
+	@Column(name = "mention_everyone", nullable = false)
+	private boolean mentionEveryone = false;
+
+	// FR-202-B(메시지 이모지 반응): 메시지 삭제 시 반응도 함께 정리된다(cascade + orphanRemoval).
+	@OneToMany(mappedBy = "message", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+	private List<MessageReaction> reactions = new ArrayList<>();
+
 	public Message(Channel channel, User author, String content, Message parentMessage) {
 		this(channel, author, content, parentMessage, MessageType.USER);
 	}
@@ -98,6 +121,15 @@ public class Message extends BaseTimeEntity {
 	 */
 	public static Message createTaskCommentSync(Channel channel, User author, String content, Message parentMessage) {
 		return new Message(channel, author, content, parentMessage, MessageType.TASK_COMMENT_SYNC);
+	}
+
+	/**
+	 * FR-202-A: 메시지 생성 직후 멘션 정보를 채운다(개별 멘션 사용자 집합 + @전체 여부).
+	 * USER 메시지에만 적용되며, SYSTEM/TASK_COMMENT_SYNC 메시지는 호출하지 않으므로 빈 상태를 유지한다.
+	 */
+	public void applyMentions(Set<User> mentionedUsers, boolean mentionEveryone) {
+		this.mentionedUsers = new LinkedHashSet<>(mentionedUsers);
+		this.mentionEveryone = mentionEveryone;
 	}
 
 	/**
