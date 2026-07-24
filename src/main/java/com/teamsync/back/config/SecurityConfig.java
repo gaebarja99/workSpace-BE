@@ -4,6 +4,7 @@ import com.teamsync.back.auth.JwtAuthenticationFilter;
 import com.teamsync.back.auth.JwtTokenProvider;
 import com.teamsync.back.auth.RestAccessDeniedHandler;
 import com.teamsync.back.auth.RestAuthenticationEntryPoint;
+import com.teamsync.back.user.UserRepository;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -56,7 +57,8 @@ public class SecurityConfig {
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtTokenProvider jwtTokenProvider,
-			RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler)
+			RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler,
+			UserRepository userRepository)
 			throws Exception {
 		http
 				.csrf(AbstractHttpConfigurer::disable)
@@ -64,12 +66,14 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/api/auth/**").permitAll()
+						// 구성원 관리(P1): 초대 토큰 공개 조회(가입 전 사용자, 인증 불가 상태에서 열람)
+						.requestMatchers("/api/invitations/**").permitAll()
 						.requestMatchers("/actuator/health").permitAll()
 						.anyRequest().authenticated())
 				.exceptionHandling(handling -> handling
 						.authenticationEntryPoint(authenticationEntryPoint)
 						.accessDeniedHandler(accessDeniedHandler))
-				.addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider), UsernamePasswordAuthenticationFilter.class);
+				.addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, userRepository), UsernamePasswordAuthenticationFilter.class);
 
 		return http.build();
 	}

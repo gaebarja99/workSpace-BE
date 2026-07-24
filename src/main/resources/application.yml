@@ -92,3 +92,7 @@ notification:
     from: ${NOTIFICATION_EMAIL_FROM:no-reply@teamsync.local}
   push:
     enabled: ${NOTIFICATION_PUSH_ENABLED:false}
+
+# 구성원 관리(P1): 초대 이메일에 담을 프론트엔드 링크(예: {frontend-base-url}/invite/{token}) 베이스 URL.
+app:
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}

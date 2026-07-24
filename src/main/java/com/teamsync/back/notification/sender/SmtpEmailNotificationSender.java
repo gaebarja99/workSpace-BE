@@ -24,14 +24,19 @@ public class SmtpEmailNotificationSender implements EmailNotificationSender {
 
 	@Override
 	public void send(User recipient, String subject, String body) {
+		send(recipient.getEmail(), subject, body);
+	}
+
+	@Override
+	public void send(String toEmail, String subject, String body) {
 		SimpleMailMessage mail = new SimpleMailMessage();
 		if (StringUtils.hasText(from)) {
 			mail.setFrom(from);
 		}
-		mail.setTo(recipient.getEmail());
+		mail.setTo(toEmail);
 		mail.setSubject(subject);
 		mail.setText(body);
 		mailSender.send(mail);
-		log.debug("[SMTP-EMAIL] sent to={} subject=\"{}\"", recipient.getEmail(), subject);
+		log.debug("[SMTP-EMAIL] sent to={} subject=\"{}\"", toEmail, subject);
 	}
 }

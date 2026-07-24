@@ -7,12 +7,14 @@ import com.teamsync.back.auth.sso.dto.SsoAuthorizeResponse;
 import com.teamsync.back.auth.sso.dto.SsoExchangeRequest;
 import com.teamsync.back.auth.sso.dto.SsoProviderInfo;
 import com.teamsync.back.auth.sso.dto.SsoProvidersResponse;
+import com.teamsync.back.common.exception.AccountDeactivatedException;
 import com.teamsync.back.common.exception.SsoNoWorkspaceException;
 import com.teamsync.back.common.exception.SsoProviderDisabledException;
 import com.teamsync.back.user.AuthProvider;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
+import com.teamsync.back.user.UserStatus;
 import com.teamsync.back.workspace.Workspace;
 import com.teamsync.back.workspace.WorkspaceRepository;
 import java.util.LinkedHashMap;
@@ -83,6 +85,11 @@ public class SsoService {
 		User user = userRepository.findByEmail(email)
 				.orElseGet(() -> userRepository.save(
 						new User(workspace, email, safeName(info.name(), email), Role.MEMBER, authProvider)));
+
+		// 구성원 관리(P1): 비활성화(DEACTIVATED)된 계정은 SSO로도 로그인/토큰 발급을 차단한다.
+		if (user.getStatus() == UserStatus.DEACTIVATED) {
+			throw new AccountDeactivatedException();
+		}
 
 		return issueToken(user);
 	}

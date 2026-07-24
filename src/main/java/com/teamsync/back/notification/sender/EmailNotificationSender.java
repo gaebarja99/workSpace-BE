@@ -10,4 +10,9 @@ import com.teamsync.back.user.User;
 public interface EmailNotificationSender {
 
 	void send(User recipient, String subject, String body);
+
+	/**
+	 * 구성원 관리(P1): 초대 대상은 아직 User가 아니므로(가입 전) 이메일 문자열 기반으로 발송한다.
+	 */
+	void send(String toEmail, String subject, String body);
 }

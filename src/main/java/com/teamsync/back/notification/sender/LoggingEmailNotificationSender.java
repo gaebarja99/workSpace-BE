@@ -12,6 +12,11 @@ public class LoggingEmailNotificationSender implements EmailNotificationSender {
 
 	@Override
 	public void send(User recipient, String subject, String body) {
-		log.info("[MOCK-EMAIL] to={} subject=\"{}\" body=\"{}\"", recipient.getEmail(), subject, body);
+		send(recipient.getEmail(), subject, body);
+	}
+
+	@Override
+	public void send(String toEmail, String subject, String body) {
+		log.info("[MOCK-EMAIL] to={} subject=\"{}\" body=\"{}\"", toEmail, subject, body);
 	}
 }

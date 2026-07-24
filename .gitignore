@@ -9,6 +9,7 @@ build/
 .idea/
 *.iml
 out/
+bin/
 
 # env
 .env

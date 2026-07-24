@@ -17,9 +17,11 @@ import com.teamsync.back.notification.dto.NotificationPreferenceView;
 import com.teamsync.back.notification.dto.NotificationPreferencesResponse;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
+import com.teamsync.back.user.UserRepository;
 import com.teamsync.back.workspace.Workspace;
 import java.lang.reflect.Field;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -63,6 +65,23 @@ class NotificationControllerWebMvcTest {
 	// 메인 앱(@EnableJpaAuditing)이 요구하는 JPA 메타모델을 웹 슬라이스에는 두지 않으므로 목으로 대체한다.
 	@MockitoBean
 	private JpaMetamodelMappingContext jpaMetamodelMappingContext;
+
+	// JwtAuthenticationFilter 회귀 방지(구성원 관리 P1): 인증 성공 후 PK 단건 조회로 계정을 다시 읽어
+	// 상태(ACTIVE)/역할을 최신화하므로, 이 웹 슬라이스 테스트에서도 token()이 발급한 사용자와 동일한
+	// id로 findById가 그 사용자(ACTIVE)를 반환하도록 목으로 대체한다.
+	@MockitoBean
+	private UserRepository userRepository;
+
+	private User activeUser;
+
+	@BeforeEach
+	void stubActiveUser() throws Exception {
+		Workspace workspace = new Workspace("그로우테크", "growtech.io");
+		setId(workspace, 10L);
+		activeUser = new User(workspace, "member@growtech.io", "hashed", "박멤버", Role.MEMBER);
+		setId(activeUser, 1L);
+		when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(activeUser));
+	}
 
 	@TestConfiguration
 	static class TestBeans {
@@ -114,11 +133,7 @@ class NotificationControllerWebMvcTest {
 	}
 
 	private String token() throws Exception {
-		Workspace workspace = new Workspace("그로우테크", "growtech.io");
-		setId(workspace, 10L);
-		User user = new User(workspace, "member@growtech.io", "hashed", "박멤버", Role.MEMBER);
-		setId(user, 1L);
-		return jwtTokenProvider.generateAccessToken(user);
+		return jwtTokenProvider.generateAccessToken(activeUser);
 	}
 
 	private static NotificationPreferencesResponse defaultResponse() {

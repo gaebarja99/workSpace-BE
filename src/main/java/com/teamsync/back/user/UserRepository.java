@@ -14,6 +14,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 	boolean existsByEmail(String email);
 
+	// 구성원 관리(P1): 다른 워크스페이스 사용자를 조회/수정하지 못하도록 workspaceId로 스코핑.
+	Optional<User> findByIdAndWorkspaceId(Long id, Long workspaceId);
+
+	// 구성원 목록(GET /api/admin/members): 가입 순.
+	List<User> findAllByWorkspaceIdOrderByCreatedAtAsc(Long workspaceId);
+
+	long countByWorkspaceId(Long workspaceId);
+
+	long countByWorkspaceIdAndStatus(Long workspaceId, UserStatus status);
+
+	long countByWorkspaceIdAndRole(Long workspaceId, Role role);
+
+	long countByWorkspaceIdAndRoleAndStatus(Long workspaceId, Role role, UserStatus status);
+
 	// 태스크 담당자 지정(FR-102) 시 다른 워크스페이스 사용자가 섞여 들어오지 않도록 스코핑 검증.
 	List<User> findAllByIdInAndWorkspaceId(Collection<Long> ids, Long workspaceId);
 

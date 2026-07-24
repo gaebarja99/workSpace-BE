@@ -4,11 +4,13 @@ import com.teamsync.back.auth.dto.LoginRequest;
 import com.teamsync.back.auth.dto.SignupRequest;
 import com.teamsync.back.auth.dto.TokenResponse;
 import com.teamsync.back.auth.dto.UserSummary;
+import com.teamsync.back.common.exception.AccountDeactivatedException;
 import com.teamsync.back.common.exception.DuplicateEmailException;
 import com.teamsync.back.common.exception.InvalidCredentialsException;
 import com.teamsync.back.common.exception.WorkspaceNameRequiredException;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
+import com.teamsync.back.user.UserStatus;
 import com.teamsync.back.user.UserRepository;
 import com.teamsync.back.workspace.Workspace;
 import com.teamsync.back.workspace.WorkspaceRepository;
@@ -83,6 +85,11 @@ public class AuthService {
 		if (user.getPasswordHash() == null
 				|| !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
 			throw new InvalidCredentialsException();
+		}
+
+		// 구성원 관리(P1): 비활성화(DEACTIVATED)된 계정은 자격 증명이 맞아도 로그인/토큰 발급을 차단한다.
+		if (user.getStatus() == UserStatus.DEACTIVATED) {
+			throw new AccountDeactivatedException();
 		}
 
 		return issueToken(user);

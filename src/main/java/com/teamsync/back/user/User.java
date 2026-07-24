@@ -50,6 +50,11 @@ public class User extends BaseTimeEntity {
 	@Column(name = "auth_provider", nullable = false, length = 20)
 	private AuthProvider authProvider;
 
+	// 구성원 관리(P1): 활성/비활성 상태. 신규 가입(회원가입/SSO JIT/초대 수락) 시 항상 ACTIVE로 시작한다.
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20)
+	private UserStatus status = UserStatus.ACTIVE;
+
 	/** 이메일 가입(LOCAL): 비밀번호 해시를 갖는다. */
 	public User(Workspace workspace, String email, String passwordHash, String name, Role role) {
 		this.workspace = workspace;
@@ -68,5 +73,15 @@ public class User extends BaseTimeEntity {
 		this.name = name;
 		this.role = role;
 		this.authProvider = authProvider;
+	}
+
+	/** 구성원 관리(P1): 관리자가 워크스페이스 멤버의 역할을 변경한다. */
+	public void changeRole(Role role) {
+		this.role = role;
+	}
+
+	/** 구성원 관리(P1): 관리자가 계정을 활성화/비활성화한다. DEACTIVATED는 로그인/토큰 발급이 차단된다. */
+	public void changeStatus(UserStatus status) {
+		this.status = status;
 	}
 }
