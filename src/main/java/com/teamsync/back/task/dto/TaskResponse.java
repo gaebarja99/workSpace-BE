@@ -13,6 +13,8 @@ import java.util.List;
  * FR-301/303(US-09): linkedChannelId/linkedMessageId는 이 태스크가 메시지 변환(FR-301)으로 생성된
  * 경우에만 값이 채워지며(TaskMessageLink 존재), 프론트는 이 값으로 "관련 대화 보기"(FR-303) 버튼
  * 노출 여부를 판단한다(별도 조회 엔드포인트 없음). channelNotificationsEnabled는 FR-302 on/off 토글.
+ * recurringTemplateId(FR-106): 이 태스크가 반복 태스크 템플릿의 일 배치로 자동 생성된 경우에만 값이
+ * 채워진다(일반 생성/메시지 전환 태스크는 null).
  */
 public record TaskResponse(
 		Long id,
@@ -28,6 +30,7 @@ public record TaskResponse(
 		Long linkedChannelId,
 		Long linkedMessageId,
 		boolean channelNotificationsEnabled,
+		Long recurringTemplateId,
 		LocalDateTime createdAt,
 		LocalDateTime updatedAt
 ) {
@@ -46,6 +49,7 @@ public record TaskResponse(
 				link != null ? link.getMessage().getChannel().getId() : null,
 				link != null ? link.getMessage().getId() : null,
 				task.isChannelNotificationsEnabled(),
+				task.getRecurringTemplate() != null ? task.getRecurringTemplate().getId() : null,
 				task.getCreatedAt(),
 				task.getUpdatedAt());
 	}
