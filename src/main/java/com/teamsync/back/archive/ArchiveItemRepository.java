@@ -10,4 +10,7 @@ public interface ArchiveItemRepository extends JpaRepository<ArchiveItem, Long> 
 	// 조합에서 있었던 카티전 곱 중복 문제는 발생하지 않는다(컬렉션이 하나뿐).
 	@EntityGraph(attributePaths = {"author", "tags"})
 	List<ArchiveItem> findAllByProject_IdOrderByCreatedAtDescIdDesc(Long projectId);
+
+	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 아카이브 항목이 하나라도 남아있는지 확인한다.
+	boolean existsByProject_Id(Long projectId);
 }

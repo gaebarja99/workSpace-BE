@@ -62,4 +62,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 	@EntityGraph(attributePaths = "assignees")
 	List<Task> findAllByProject_IdAndAssignees_IdAndStatusNot(Long projectId, Long assigneeId,
 			TaskStatus excludedStatus);
+
+	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 태스크가 하나라도 남아있는지 확인한다.
+	boolean existsByProject_Id(Long projectId);
 }

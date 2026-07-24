@@ -15,4 +15,7 @@ public interface TeamWeeklyReportRepository extends JpaRepository<TeamWeeklyRepo
 	// FR-410(보고 이력): "보고서 생성이 시작된 시점부터"의 과거 주차 목록을 구성하기 위한 distinct weekStart.
 	@Query("SELECT DISTINCT t.weekStart FROM TeamWeeklyReport t WHERE t.project.id = :projectId")
 	List<LocalDate> findDistinctWeekStartsByProjectId(@Param("projectId") Long projectId);
+
+	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 팀 주간 보고서가 하나라도 남아있는지 확인한다.
+	boolean existsByProject_Id(Long projectId);
 }

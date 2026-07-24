@@ -24,4 +24,7 @@ public interface RecurringTaskTemplateRepository extends JpaRepository<Recurring
 	// 전용: project/createdBy/assignees를 한 번에 즉시 로딩해 N+1을 피한다.
 	@EntityGraph(attributePaths = {"assignees", "createdBy", "project"})
 	Optional<RecurringTaskTemplate> findWithDetailsById(Long id);
+
+	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 반복 태스크 템플릿이 하나라도 남아있는지 확인한다.
+	boolean existsByProject_Id(Long projectId);
 }

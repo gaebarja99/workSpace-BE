@@ -29,4 +29,7 @@ public interface ArchivedFileRepository extends JpaRepository<ArchivedFile, Long
 			+ "ORDER BY f.createdAt DESC, f.id DESC")
 	List<ArchivedFile> searchByWorkspace(@Param("workspaceId") Long workspaceId, @Param("keyword") String keyword,
 			Pageable pageable);
+
+	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 아카이브 파일이 하나라도 남아있는지 확인한다.
+	boolean existsByProject_Id(Long projectId);
 }

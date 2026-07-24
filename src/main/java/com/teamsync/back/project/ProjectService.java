@@ -1,10 +1,20 @@
 package com.teamsync.back.project;
 
+import com.teamsync.back.archive.ArchiveItemRepository;
+import com.teamsync.back.archive.file.ArchivedFileRepository;
 import com.teamsync.back.auth.AuthenticatedUser;
+import com.teamsync.back.channel.ChannelRepository;
+import com.teamsync.back.common.exception.ProjectHasDependenciesException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
 import com.teamsync.back.project.dto.MemberSummaryResponse;
+import com.teamsync.back.project.dto.ProjectAdminResponse;
 import com.teamsync.back.project.dto.ProjectCreateRequest;
 import com.teamsync.back.project.dto.ProjectResponse;
+import com.teamsync.back.project.dto.ProjectStatsResponse;
+import com.teamsync.back.report.TeamWeeklyReportRepository;
+import com.teamsync.back.report.WeeklyReportRepository;
+import com.teamsync.back.task.TaskRepository;
+import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
 import com.teamsync.back.workspace.Workspace;
@@ -25,12 +35,29 @@ public class ProjectService {
 	private final ProjectRepository projectRepository;
 	private final WorkspaceRepository workspaceRepository;
 	private final UserRepository userRepository;
+	private final TaskRepository taskRepository;
+	private final ChannelRepository channelRepository;
+	private final ArchiveItemRepository archiveItemRepository;
+	private final ArchivedFileRepository archivedFileRepository;
+	private final WeeklyReportRepository weeklyReportRepository;
+	private final TeamWeeklyReportRepository teamWeeklyReportRepository;
+	private final RecurringTaskTemplateRepository recurringTaskTemplateRepository;
 
 	public ProjectService(ProjectRepository projectRepository, WorkspaceRepository workspaceRepository,
-			UserRepository userRepository) {
+			UserRepository userRepository, TaskRepository taskRepository, ChannelRepository channelRepository,
+			ArchiveItemRepository archiveItemRepository, ArchivedFileRepository archivedFileRepository,
+			WeeklyReportRepository weeklyReportRepository, TeamWeeklyReportRepository teamWeeklyReportRepository,
+			RecurringTaskTemplateRepository recurringTaskTemplateRepository) {
 		this.projectRepository = projectRepository;
 		this.workspaceRepository = workspaceRepository;
 		this.userRepository = userRepository;
+		this.taskRepository = taskRepository;
+		this.channelRepository = channelRepository;
+		this.archiveItemRepository = archiveItemRepository;
+		this.archivedFileRepository = archivedFileRepository;
+		this.weeklyReportRepository = weeklyReportRepository;
+		this.teamWeeklyReportRepository = teamWeeklyReportRepository;
+		this.recurringTaskTemplateRepository = recurringTaskTemplateRepository;
 	}
 
 	@Transactional
@@ -63,5 +90,65 @@ public class ProjectService {
 		return userRepository.findAllByWorkspaceIdOrderByNameAsc(principal.workspaceId()).stream()
 				.map(MemberSummaryResponse::from)
 				.toList();
+	}
+
+	/**
+	 * 프로젝트 관리(관리자, P2): GET /api/admin/projects. memberCount는 프로젝트별 멤버십 테이블이
+	 * 없으므로 listMembers()와 동일하게 workspace 전체 User 수로 근사한다.
+	 */
+	@Transactional(readOnly = true)
+	public List<ProjectAdminResponse> listProjectsForAdmin(AuthenticatedUser principal) {
+		long memberCount = userRepository.countByWorkspaceId(principal.workspaceId());
+		return projectRepository.findAllByWorkspaceIdOrderByCreatedAtDesc(principal.workspaceId()).stream()
+				.map(project -> ProjectAdminResponse.of(project, memberCount))
+				.toList();
+	}
+
+	/** 프로젝트 관리(관리자, P2): GET /api/admin/projects/stats. */
+	@Transactional(readOnly = true)
+	public ProjectStatsResponse getStats(AuthenticatedUser principal) {
+		Long workspaceId = principal.workspaceId();
+		long total = projectRepository.countByWorkspaceId(workspaceId);
+		long active = projectRepository.countByWorkspaceIdAndStatus(workspaceId, ProjectStatus.ACTIVE);
+		long planned = projectRepository.countByWorkspaceIdAndStatus(workspaceId, ProjectStatus.PLANNED);
+		long archived = projectRepository.countByWorkspaceIdAndStatus(workspaceId, ProjectStatus.ARCHIVED);
+		return new ProjectStatsResponse(total, active, planned, archived);
+	}
+
+	/** 프로젝트 관리(관리자, P2): PATCH /api/admin/projects/{id}/status. */
+	@Transactional
+	public ProjectAdminResponse changeStatus(AuthenticatedUser principal, Long projectId, ProjectStatus newStatus) {
+		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+				.orElseThrow(ProjectNotFoundException::new);
+		project.changeStatus(newStatus);
+		long memberCount = userRepository.countByWorkspaceId(principal.workspaceId());
+		return ProjectAdminResponse.of(project, memberCount);
+	}
+
+	/**
+	 * 프로젝트 관리(관리자, P2): DELETE /api/admin/projects/{id}.
+	 * Task/Channel/ArchiveItem/ArchivedFile/WeeklyReport/TeamWeeklyReport/RecurringTaskTemplate은
+	 * 모두 projects.id를 참조하는 FK이며 ON DELETE 정책이 미지정(RESTRICT)이다. 실제 삭제를 시도해
+	 * DataIntegrityViolationException을 catch-all(500)로 흘려보내는 대신, 삭제 전에 연관 데이터
+	 * 존재 여부를 선제적으로 검증해 409 CONFLICT로 명확히 응답한다.
+	 */
+	@Transactional
+	public void deleteProject(AuthenticatedUser principal, Long projectId) {
+		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+				.orElseThrow(ProjectNotFoundException::new);
+		if (hasDependencies(projectId)) {
+			throw new ProjectHasDependenciesException();
+		}
+		projectRepository.delete(project);
+	}
+
+	private boolean hasDependencies(Long projectId) {
+		return taskRepository.existsByProject_Id(projectId)
+				|| channelRepository.existsByProject_Id(projectId)
+				|| archiveItemRepository.existsByProject_Id(projectId)
+				|| archivedFileRepository.existsByProject_Id(projectId)
+				|| weeklyReportRepository.existsByProject_Id(projectId)
+				|| teamWeeklyReportRepository.existsByProject_Id(projectId)
+				|| recurringTaskTemplateRepository.existsByProject_Id(projectId);
 	}
 }

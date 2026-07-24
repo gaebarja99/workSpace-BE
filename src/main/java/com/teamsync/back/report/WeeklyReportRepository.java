@@ -27,4 +27,7 @@ public interface WeeklyReportRepository extends JpaRepository<WeeklyReport, Long
 			+ "AND LOWER(wr.nextWeekPlan) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\'")
 	boolean existsNextWeekPlanMatch(@Param("projectId") Long projectId, @Param("weekStart") LocalDate weekStart,
 			@Param("keyword") String keyword);
+
+	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 개인 주간 보고서가 하나라도 남아있는지 확인한다.
+	boolean existsByProject_Id(Long projectId);
 }

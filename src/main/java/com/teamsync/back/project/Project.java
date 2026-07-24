@@ -5,6 +5,8 @@ import com.teamsync.back.user.User;
 import com.teamsync.back.workspace.Workspace;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -46,10 +48,21 @@ public class Project extends BaseTimeEntity {
 	@JoinColumn(name = "created_by")
 	private User createdBy;
 
+	// 프로젝트 관리(관리자, P2): 진행 상태. 신규 프로젝트는 항상 ACTIVE로 시작하고,
+	// 관리자만 PATCH /api/admin/projects/{id}/status로 전환할 수 있다.
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20)
+	private ProjectStatus status = ProjectStatus.ACTIVE;
+
 	public Project(Workspace workspace, String name, String description, User createdBy) {
 		this.workspace = workspace;
 		this.name = name;
 		this.description = description;
 		this.createdBy = createdBy;
+	}
+
+	/** 프로젝트 관리(관리자, P2): 관리자가 프로젝트 상태를 변경한다. */
+	public void changeStatus(ProjectStatus status) {
+		this.status = status;
 	}
 }

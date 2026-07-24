@@ -14,4 +14,7 @@ public interface ChannelRepository extends JpaRepository<Channel, Long> {
 
 	// FR-302: TaskMessageLink가 없는 태스크의 시스템 메시지 게시 대상(프로젝트 기본 채널) 조회에 사용.
 	Optional<Channel> findFirstByProject_IdAndNameOrderByIdAsc(Long projectId, String name);
+
+	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 채널이 하나라도 남아있는지 확인한다.
+	boolean existsByProject_Id(Long projectId);
 }
