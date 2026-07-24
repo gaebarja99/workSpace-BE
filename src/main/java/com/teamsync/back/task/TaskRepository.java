@@ -65,4 +65,15 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
 	// 프로젝트 관리(관리자, P2) DELETE 사전 검증: 프로젝트에 태스크가 하나라도 남아있는지 확인한다.
 	boolean existsByProject_Id(Long projectId);
+
+	// FR-407(조직 롤업 대시보드) "완료 태스크 수": 위 findAllByProject_IdAndAssignees_IdAndStatusAndUpdatedAtBetween와
+	// 동일한 FR-401 OVERDUE 판정 윈도우 규칙(status=DONE AND updatedAt in [weekStart, weekEnd+1일))을 담당자
+	// 구분 없이 프로젝트 전체로 확장한 버전이다(한 태스크에 담당자가 여러 명이어도 1건으로만 집계하기 위해
+	// assignees 필터를 제거).
+	List<Task> findAllByProject_IdAndStatusAndUpdatedAtBetween(
+			Long projectId, TaskStatus status, LocalDateTime updatedAtStart, LocalDateTime updatedAtEnd);
+
+	// FR-407(조직 롤업 대시보드) "진행 중+이슈 판정 대상": 위 findAllByProject_IdAndAssignees_IdAndStatusNot와
+	// 동일하되 담당자 구분 없이 프로젝트 전체 미완료 태스크를 조회한다.
+	List<Task> findAllByProject_IdAndStatusNot(Long projectId, TaskStatus excludedStatus);
 }

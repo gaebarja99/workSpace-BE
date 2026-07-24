@@ -3,11 +3,13 @@ package com.teamsync.back.report;
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.channel.message.Message;
 import com.teamsync.back.channel.message.MessageRepository;
+import com.teamsync.back.common.exception.InvalidReportRequestException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
 import com.teamsync.back.common.exception.WeeklyReportAlreadySubmittedException;
 import com.teamsync.back.notification.NotificationService;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
+import com.teamsync.back.project.ProjectStatus;
 import com.teamsync.back.report.dto.CompletedTaskItem;
 import com.teamsync.back.report.dto.HighlightItem;
 import com.teamsync.back.report.dto.InProgressTaskItem;
@@ -18,6 +20,9 @@ import com.teamsync.back.report.dto.NextWeekPlanUpdateRequest;
 import com.teamsync.back.report.dto.RemindResponse;
 import com.teamsync.back.report.dto.ReportHistoryItem;
 import com.teamsync.back.report.dto.ReportHistoryStatus;
+import com.teamsync.back.report.dto.RollupResponse;
+import com.teamsync.back.report.dto.RollupTeamItem;
+import com.teamsync.back.report.dto.RollupTrendItem;
 import com.teamsync.back.report.dto.TeamMemberReportSummary;
 import com.teamsync.back.report.dto.TeamWeeklyReportResponse;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
@@ -219,6 +224,123 @@ public class WeeklyReportService {
 					(int) submittedCount, totalMemberCount, completionRate, issueCount));
 		}
 		return result;
+	}
+
+	// ----- FR-407: 조직 롤업 대시보드 -----
+
+	/**
+	 * GET /api/reports/rollup(계약 문서 fr407-contract.md). "팀"=Project(ACTIVE만), "조직"=요청자의
+	 * 워크스페이스로 축소(멀티워크스페이스 임원 개념 없음). 완료율/지연율은 buildTeamResponse/countTeamIssues와
+	 * 동일한 분모 원칙("완료+진행+이슈" 태스크 수)을 프로젝트(=팀) 단위로, computeAutoTaskSections의
+	 * OVERDUE/STALE 판정 공식을 담당자 구분 없이 프로젝트 전체로 확장해 계산한다(새 계산식을 발명하지 않음).
+	 */
+	@Transactional(readOnly = true)
+	public RollupResponse getOrgRollup(AuthenticatedUser principal, LocalDate weekStartParam) {
+		LocalDate weekStart = resolveRollupWeekStart(weekStartParam);
+		LocalDate weekEnd = weekEndOf(weekStart);
+		Long workspaceId = principal.workspaceId();
+
+		List<Project> activeProjects = projectRepository
+				.findAllByWorkspaceIdAndStatusOrderByIdAsc(workspaceId, ProjectStatus.ACTIVE);
+		int memberCount = reportMembers(workspaceId).size();
+
+		List<RollupTeamItem> teams = new ArrayList<>();
+		int orgCompleted = 0;
+		int orgDenominator = 0;
+		for (Project project : activeProjects) {
+			ProjectTaskCounts counts = computeProjectTaskCounts(project.getId(), weekStart, weekEnd);
+			int submittedCount = (int) weeklyReportRepository
+					.countByProject_IdAndWeekStartAndStatus(project.getId(), weekStart, WeeklyReportStatus.SUBMITTED);
+			int denominator = counts.denominator();
+			teams.add(new RollupTeamItem(project.getId(), project.getName(), memberCount, submittedCount,
+					percentOf(counts.completed(), denominator), percentOf(counts.overdueOnly(), denominator)));
+			orgCompleted += counts.completed();
+			orgDenominator += denominator;
+		}
+		int orgCompletionRate = percentOf(orgCompleted, orgDenominator);
+
+		List<RollupTrendItem> trend = new ArrayList<>();
+		for (int weeksAgo = 3; weeksAgo >= 1; weeksAgo--) {
+			LocalDate trendWeekStart = weekStart.minusWeeks(weeksAgo);
+			trend.add(computeOrgTrendItem(activeProjects, trendWeekStart));
+		}
+		trend.add(new RollupTrendItem(weekStart, weekEnd, orgCompletionRate));
+
+		return new RollupResponse(weekStart, weekEnd, memberCount, teams, orgCompletionRate, trend);
+	}
+
+	private RollupTrendItem computeOrgTrendItem(List<Project> activeProjects, LocalDate trendWeekStart) {
+		LocalDate trendWeekEnd = weekEndOf(trendWeekStart);
+		int completed = 0;
+		int denominator = 0;
+		for (Project project : activeProjects) {
+			ProjectTaskCounts counts = computeProjectTaskCounts(project.getId(), trendWeekStart, trendWeekEnd);
+			completed += counts.completed();
+			denominator += counts.denominator();
+		}
+		return new RollupTrendItem(trendWeekStart, trendWeekEnd, percentOf(completed, denominator));
+	}
+
+	/**
+	 * FR-407 전용: computeAutoTaskSections와 동일한 OVERDUE/STALE 판정 공식(FR-401 계약 문서 그대로)을
+	 * 담당자(assignees) 필터 없이 프로젝트 전체 단위로 확장한다. issuesTotal은 한 태스크가 OVERDUE·STALE을
+	 * 동시에 만족하면 두 번 집계될 수 있다(computeAutoTaskSections의 이슈 목록과 동일한 특성을 그대로 유지).
+	 */
+	private ProjectTaskCounts computeProjectTaskCounts(Long projectId, LocalDate weekStart, LocalDate weekEnd) {
+		LocalDateTime rangeStart = weekStart.atStartOfDay();
+		LocalDateTime rangeEndExclusive = weekEnd.plusDays(1).atStartOfDay();
+
+		int completed = taskRepository
+				.findAllByProject_IdAndStatusAndUpdatedAtBetween(projectId, TaskStatus.DONE, rangeStart, rangeEndExclusive)
+				.size();
+
+		List<Task> openTasks = taskRepository.findAllByProject_IdAndStatusNot(projectId, TaskStatus.DONE);
+		int inProgress = openTasks.size();
+
+		LocalDate today = LocalDate.now(KST);
+		LocalDate overdueCutoff = today.isBefore(weekEnd.plusDays(1)) ? today : weekEnd.plusDays(1);
+		LocalDateTime staleThreshold = LocalDateTime.now(KST).minusDays(STALE_DAYS_THRESHOLD);
+
+		int overdueOnly = 0;
+		int issuesTotal = 0;
+		for (Task t : openTasks) {
+			if (t.getDueDate() != null && t.getDueDate().isBefore(overdueCutoff)) {
+				overdueOnly++;
+				issuesTotal++;
+			}
+			if (t.getUpdatedAt().isBefore(staleThreshold)) {
+				issuesTotal++;
+			}
+		}
+		return new ProjectTaskCounts(completed, inProgress, issuesTotal, overdueOnly);
+	}
+
+	private static int percentOf(int numerator, int denominator) {
+		if (denominator == 0) {
+			return 0;
+		}
+		return (int) Math.round((numerator * 100.0) / denominator);
+	}
+
+	/**
+	 * 계약 문서 명시: weekStart 생략 시 이번 주(KST) 월요일을 기본값으로 쓰되, 값이 있는데 월요일이 아니면
+	 * (resolveWeekStart처럼 조용히 정규화하지 않고) 400으로 거부한다. "임원 대시보드"는 필터 UI에서 항상
+	 * 주 단위 옵션만 노출하므로, 월요일이 아닌 값이 들어오면 클라이언트 버그로 간주해 명시적으로 알린다.
+	 */
+	private LocalDate resolveRollupWeekStart(LocalDate weekStartParam) {
+		if (weekStartParam == null) {
+			return currentWeekStart();
+		}
+		if (weekStartParam.getDayOfWeek() != DayOfWeek.MONDAY) {
+			throw new InvalidReportRequestException("weekStart는 반드시 월요일(yyyy-MM-dd)이어야 합니다.");
+		}
+		return weekStartParam;
+	}
+
+	private record ProjectTaskCounts(int completed, int inProgress, int issuesTotal, int overdueOnly) {
+		int denominator() {
+			return completed + inProgress + issuesTotal;
+		}
 	}
 
 	// ----- 내부 구현 -----

@@ -17,4 +17,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
 	// 프로젝트 관리(관리자, P2): GET /api/admin/projects/stats에서 status별 카운트 집계에 사용.
 	long countByWorkspaceIdAndStatus(Long workspaceId, ProjectStatus status);
+
+	// FR-407(조직 롤업 대시보드): "팀"=Project 중 ACTIVE(진행중)만 대상으로 하며, projectId 오름차순으로
+	// 응답한다(계약 문서 명시).
+	List<Project> findAllByWorkspaceIdAndStatusOrderByIdAsc(Long workspaceId, ProjectStatus status);
 }
