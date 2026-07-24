@@ -11,6 +11,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -68,6 +69,19 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 				.body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "VALIDATION_ERROR",
 						"요청 본문을 해석할 수 없습니다.", request.getRequestURI()));
+	}
+
+	// FR-405: 필수 @RequestParam 누락(예: GET /api/report-templates/resolve?projectId 생략) 시
+	// 이 핸들러가 없으면 catch-all이 500으로 처리해버린다(QA E2E에서 발견). 다른 컨트롤러는 지금까지
+	// 필수 쿼리 파라미터를 전부 required=false로 선언해 이 경로를 타지 않았을 뿐, 실제로는 앱 전역에
+	// 해당하는 방어 코드라 여기(공통 핸들러)에 추가한다.
+	@ExceptionHandler(MissingServletRequestParameterException.class)
+	public ResponseEntity<ErrorResponse> handleMissingParameter(MissingServletRequestParameterException ex,
+			HttpServletRequest request) {
+		String message = ex.getParameterName() + " 파라미터는 필수입니다.";
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+				.body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "VALIDATION_ERROR", message,
+						request.getRequestURI()));
 	}
 
 	@ExceptionHandler(MaxUploadSizeExceededException.class)
