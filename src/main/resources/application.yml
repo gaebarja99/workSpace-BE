@@ -19,6 +19,19 @@ spring:
     multipart:
       max-file-size: 20MB
       max-request-size: 20MB
+  # FR-003 이메일 알림 발송용 SMTP. 기본값(빈 host)에서는 실발송을 켜지 않으므로(notification.email.enabled=false)
+  # 이 설정은 사용되지 않는다. 배포 환경에서 SMTP_HOST 등을 주입하고 NOTIFICATION_EMAIL_ENABLED=true로 켠다.
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:true}
+          starttls:
+            enable: ${SMTP_STARTTLS:true}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -33,6 +46,12 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  # FR-003 회귀 방지: spring.mail.* 자동설정이 뜨면 MailHealthIndicator가 SMTP 접속을 시도해,
+  # 이메일 비활성(기본) 환경에서 /actuator/health가 상시 DOWN(503)이 된다. mail health check는 끄고
+  # 실발송 여부는 notification.email.enabled로만 판단한다(핵심 API가 정상이면 health는 UP이어야 함).
+  health:
+    mail:
+      enabled: false
 
 # FR-002: JWT 발급/검증 설정. local 프로필 기본값은 개발 편의용이며 dev/운영 환경에서는
 # 반드시 JWT_SECRET 환경변수로 오버라이드할 것 (HS256 기준 최소 256bit/32byte 권장)
@@ -62,3 +81,14 @@ teamsync:
   # 바꾸면 되도록 한다(PRD 5.1 모듈형 모놀리스, 후속 확장 원칙).
   storage:
     local-base-path: ${STORAGE_LOCAL_PATH:./data/uploads}
+
+# FR-003 알림 이메일/푸시 발송기 설정(SSO의 실/Mock 전환 선례를 따름).
+# email/push 모두 기본 비활성(로그 Mock)이며, 배포 env에서 켠다.
+# - email.enabled=true & 위 spring.mail SMTP 설정 존재 시 JavaMailSender 실발송, 그 외에는 로그 Mock.
+# - push는 FCM 자격증명 부재로 항상 로그 Mock(enabled 값은 로그에만 표시).
+notification:
+  email:
+    enabled: ${NOTIFICATION_EMAIL_ENABLED:false}
+    from: ${NOTIFICATION_EMAIL_FROM:no-reply@teamsync.local}
+  push:
+    enabled: ${NOTIFICATION_PUSH_ENABLED:false}

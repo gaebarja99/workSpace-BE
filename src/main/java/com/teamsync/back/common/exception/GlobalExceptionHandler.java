@@ -9,6 +9,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -56,6 +57,17 @@ public class GlobalExceptionHandler {
 		}
 		return ResponseEntity.status(HttpStatus.FORBIDDEN)
 				.body(ErrorResponse.of(HttpStatus.FORBIDDEN.value(), "ACCESS_DENIED", "권한이 없습니다.", request.getRequestURI()));
+	}
+
+	// 본문 파싱 불가(잘못된 JSON, 필드 타입 불일치 - 예: FR-003에서 categories가 배열이 아님)는 400으로 응답한다.
+	// (이 핸들러가 없으면 아래 catch-all이 500으로 처리해버린다.)
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex,
+			HttpServletRequest request) {
+		log.warn("HttpMessageNotReadableException: {}", ex.getMessage());
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+				.body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "VALIDATION_ERROR",
+						"요청 본문을 해석할 수 없습니다.", request.getRequestURI()));
 	}
 
 	@ExceptionHandler(MaxUploadSizeExceededException.class)

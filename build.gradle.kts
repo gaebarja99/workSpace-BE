@@ -34,6 +34,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	// FR-003 이메일 알림 발송(JavaMailSender). notification.email.enabled=true & SMTP 설정 시에만 실발송.
+	implementation("org.springframework.boot:spring-boot-starter-mail")
 
 	implementation("org.flywaydb:flyway-core")
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")

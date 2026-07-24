@@ -5,6 +5,8 @@ import com.teamsync.back.channel.Channel;
 import com.teamsync.back.channel.message.Message;
 import com.teamsync.back.common.exception.NotificationNotFoundException;
 import com.teamsync.back.notification.dto.NotificationResponse;
+import com.teamsync.back.notification.sender.EmailNotificationSender;
+import com.teamsync.back.notification.sender.PushNotificationSender;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.task.TaskRepository;
@@ -15,7 +17,10 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,16 +30,29 @@ import org.springframework.transaction.annotation.Transactional;
  * 생성 트리거(담당자 지정, 상태 변경)는 TaskService가 태스크 변경 트랜잭션 내에서 이 서비스를 호출해
  * 정형 데이터(태스크) 변경과 알림 발생이 같은 트랜잭션 경계 안에서 함께 커밋/롤백되도록 한다.
  * 마감 임박 알림만 별도의 일일 배치(@Scheduled)로 발생시킨다.
+ *
+ * FR-003(알림 세분화 + 이메일/푸시 발송): 각 notify* 지점은 수신자별 category 설정을 조회해
+ * 인앱(Notification row)/이메일/푸시 채널로 분기한다. 인앱 기본값이 true라 기존 인앱 동작은 하위호환으로
+ * 유지되며, 이메일/푸시 발송은 best-effort(예외를 삼키고 로그만 남김)라 알림/태스크 트랜잭션을 롤백시키지 않는다.
  */
+@Slf4j
 @Service
 public class NotificationService {
 
 	private final NotificationRepository notificationRepository;
 	private final TaskRepository taskRepository;
+	private final NotificationPreferenceService preferenceService;
+	private final EmailNotificationSender emailSender;
+	private final PushNotificationSender pushSender;
 
-	public NotificationService(NotificationRepository notificationRepository, TaskRepository taskRepository) {
+	public NotificationService(NotificationRepository notificationRepository, TaskRepository taskRepository,
+			NotificationPreferenceService preferenceService, EmailNotificationSender emailSender,
+			PushNotificationSender pushSender) {
 		this.notificationRepository = notificationRepository;
 		this.taskRepository = taskRepository;
+		this.preferenceService = preferenceService;
+		this.emailSender = emailSender;
+		this.pushSender = pushSender;
 	}
 
 	@Transactional(readOnly = true)
@@ -72,12 +90,11 @@ public class NotificationService {
 	@Transactional
 	public void notifyTaskAssigned(Task task, Collection<User> recipients, Long actingUserId) {
 		String message = "\"" + task.getTitle() + "\" 태스크가 회원님에게 할당되었습니다.";
-		for (User recipient : recipients) {
-			if (recipient.getId().equals(actingUserId)) {
-				continue;
-			}
-			notificationRepository.save(new Notification(recipient, NotificationType.TASK_ASSIGNED, message, task));
-		}
+		List<User> targets = recipients.stream()
+				.filter(recipient -> !recipient.getId().equals(actingUserId))
+				.toList();
+		dispatch(NotificationType.TASK_ASSIGNED, targets,
+				recipient -> new Notification(recipient, NotificationType.TASK_ASSIGNED, message, task), message);
 	}
 
 	/**
@@ -89,12 +106,11 @@ public class NotificationService {
 			Long actingUserId) {
 		String message = "\"" + task.getTitle() + "\" 태스크 상태가 " + TaskStatusLabels.of(previousStatus) + "에서 "
 				+ TaskStatusLabels.of(newStatus) + "(으)로 변경되었습니다.";
-		for (User assignee : task.getAssignees()) {
-			if (assignee.getId().equals(actingUserId)) {
-				continue;
-			}
-			notificationRepository.save(new Notification(assignee, NotificationType.TASK_STATUS_CHANGED, message, task));
-		}
+		List<User> targets = task.getAssignees().stream()
+				.filter(assignee -> !assignee.getId().equals(actingUserId))
+				.toList();
+		dispatch(NotificationType.TASK_STATUS_CHANGED, targets,
+				recipient -> new Notification(recipient, NotificationType.TASK_STATUS_CHANGED, message, task), message);
 	}
 
 	/**
@@ -107,13 +123,9 @@ public class NotificationService {
 			Long actingUserId) {
 		String actorName = actor != null ? actor.getName() : "시스템";
 		String message = actorName + "님이 회원님을 언급했습니다: " + snippet(content);
-		Set<Long> notified = new HashSet<>();
-		for (User recipient : recipients) {
-			if (recipient.getId().equals(actingUserId) || !notified.add(recipient.getId())) {
-				continue;
-			}
-			notificationRepository.save(Notification.forTaskMention(recipient, message, task));
-		}
+		List<User> targets = distinctTargets(recipients, actingUserId);
+		dispatch(NotificationType.MENTION, targets,
+				recipient -> Notification.forTaskMention(recipient, message, task), message);
 	}
 
 	/**
@@ -125,14 +137,18 @@ public class NotificationService {
 		String actorName = message.getAuthor() != null ? message.getAuthor().getName() : "시스템";
 		String notificationMessage = actorName + "님이 회원님을 언급했습니다: " + snippet(message.getContent());
 		Channel channel = message.getChannel();
-		Set<Long> notified = new HashSet<>();
-		for (User recipient : recipients) {
-			if (recipient.getId().equals(actingUserId) || !notified.add(recipient.getId())) {
-				continue;
-			}
-			notificationRepository.save(
-					Notification.forMessageMention(recipient, notificationMessage, channel, message));
-		}
+		List<User> targets = distinctTargets(recipients, actingUserId);
+		dispatch(NotificationType.MENTION, targets,
+				recipient -> Notification.forMessageMention(recipient, notificationMessage, channel, message),
+				notificationMessage);
+	}
+
+	/** 멘션 수신자 목록에서 본인(actingUserId)을 제외하고 중복을 제거해 전달 순서를 보존한 리스트로 만든다. */
+	private static List<User> distinctTargets(Collection<User> recipients, Long actingUserId) {
+		Set<Long> seen = new HashSet<>();
+		return recipients.stream()
+				.filter(recipient -> !recipient.getId().equals(actingUserId) && seen.add(recipient.getId()))
+				.toList();
 	}
 
 	/** 멘션 알림 문구용: 내용 앞 40자만 남기고, 잘렸으면 말줄임표를 붙인다. */
@@ -164,15 +180,13 @@ public class NotificationService {
 		List<Task> dueTasks = taskRepository.findAllByDueDateAndStatusNot(dueDate, TaskStatus.DONE);
 		for (Task task : dueTasks) {
 			String message = "\"" + task.getTitle() + "\" 태스크 마감일이 " + dDayLabel + "입니다.";
-			for (User assignee : task.getAssignees()) {
-				boolean alreadyNotified = notificationRepository
-						.existsByRecipient_IdAndTask_IdAndTypeAndCreatedAtBetween(
-								assignee.getId(), task.getId(), type, todayStart, todayEnd);
-				if (alreadyNotified) {
-					continue;
-				}
-				notificationRepository.save(new Notification(assignee, type, message, task));
-			}
+			// 오늘 이미 (인앱) 알림이 생성된 담당자는 인앱/이메일/푸시 모두 다시 발송하지 않도록 사전에 걸러낸다.
+			List<User> targets = task.getAssignees().stream()
+					.filter(assignee -> !notificationRepository
+							.existsByRecipient_IdAndTask_IdAndTypeAndCreatedAtBetween(
+									assignee.getId(), task.getId(), type, todayStart, todayEnd))
+					.toList();
+			dispatch(type, targets, recipient -> new Notification(recipient, type, message, task), message);
 		}
 	}
 
@@ -184,7 +198,8 @@ public class NotificationService {
 	@Transactional
 	public void notifyWeeklyReportReminder(Project project, User recipient) {
 		String message = "\"" + project.getName() + "\" 프로젝트의 이번 주 주간 보고서를 아직 제출하지 않았습니다.";
-		notificationRepository.save(new Notification(recipient, NotificationType.WEEKLY_REPORT_REMINDER, message, null));
+		dispatch(NotificationType.WEEKLY_REPORT_REMINDER, List.of(recipient),
+				target -> new Notification(target, NotificationType.WEEKLY_REPORT_REMINDER, message, null), message);
 	}
 
 	/**
@@ -202,5 +217,60 @@ public class NotificationService {
 		}
 		notifyWeeklyReportReminder(project, recipient);
 		return true;
+	}
+
+	/**
+	 * FR-003 중앙 발송 헬퍼: 수신자별 category 설정을 한 번의 조회로 해석(N+1 방지)한 뒤, 채널별로 분기한다.
+	 * - inApp=true  → 기존대로 Notification row 저장(기본 true라 하위호환 유지).
+	 * - email=true  → 이메일 발송기 호출(best-effort).
+	 * - push=true   → 푸시 발송기 호출(best-effort).
+	 * notificationFactory는 수신자별 Notification(태스크/멘션 딥링크 등 변형)을 만들어 준다. message는 한 배치에서
+	 * 모든 수신자에게 동일하며 이메일/푸시 본문으로도 재사용한다.
+	 */
+	private void dispatch(NotificationType type, List<User> recipients, Function<User, Notification> notificationFactory,
+			String message) {
+		if (recipients.isEmpty()) {
+			return;
+		}
+		NotificationCategory category = NotificationCategory.of(type);
+		List<Long> recipientIds = recipients.stream().map(User::getId).toList();
+		Map<Long, EffectiveChannels> channelsByUser = preferenceService.resolve(category, recipientIds);
+		String subject = channelText(type);
+
+		for (User recipient : recipients) {
+			EffectiveChannels channels = channelsByUser.get(recipient.getId());
+			if (channels.inApp()) {
+				notificationRepository.save(notificationFactory.apply(recipient));
+			}
+			if (channels.email()) {
+				safeSend("email", recipient, () -> emailSender.send(recipient, subject, message));
+			}
+			if (channels.push()) {
+				safeSend("push", recipient, () -> pushSender.send(recipient, subject, message));
+			}
+		}
+	}
+
+	/** 이메일 제목 / 푸시 제목 공통 문구. 본문은 인앱 알림 메시지를 그대로 재사용한다. */
+	private static String channelText(NotificationType type) {
+		return switch (type) {
+			case TASK_DUE_SOON, TASK_DUE_TODAY -> "[TeamSync] 태스크 마감 임박";
+			case TASK_ASSIGNED -> "[TeamSync] 새 담당자 지정";
+			case TASK_STATUS_CHANGED -> "[TeamSync] 태스크 상태 변경";
+			case MENTION -> "[TeamSync] 새 멘션 알림";
+			case WEEKLY_REPORT_REMINDER -> "[TeamSync] 주간 보고 미제출 리마인드";
+		};
+	}
+
+	/**
+	 * 이메일/푸시 발송은 best-effort: 예외를 삼키고 로그만 남겨 인앱 알림/태스크 변경 트랜잭션을 롤백시키지 않는다.
+	 * (실발송 지연이 채팅 응답 지연으로 번지지 않도록, 후속에 비동기 발송으로 옮길 수 있는 단일 지점으로 격리한다.)
+	 */
+	private void safeSend(String channel, User recipient, Runnable send) {
+		try {
+			send.run();
+		} catch (RuntimeException e) {
+			log.warn("[{}] 알림 발송 실패(무시하고 계속) recipientId={} : {}", channel, recipient.getId(), e.getMessage());
+		}
 	}
 }
