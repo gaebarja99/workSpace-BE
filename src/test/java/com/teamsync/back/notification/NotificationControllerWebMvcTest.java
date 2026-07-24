@@ -99,12 +99,12 @@ class NotificationControllerWebMvcTest {
 	}
 
 	@Test
-	void 인증된_GET_preferences는_200과_5개_카테고리를_반환한다() throws Exception {
+	void 인증된_GET_preferences는_200과_6개_카테고리를_반환한다() throws Exception {
 		when(preferenceService.getMyPreferences(any())).thenReturn(defaultResponse());
 
 		mockMvc.perform(get("/api/notifications/preferences").header("Authorization", "Bearer " + token()))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.categories.length()").value(5))
+				.andExpect(jsonPath("$.categories.length()").value(NotificationCategory.values().length))
 				.andExpect(jsonPath("$.categories[0].category").value("TASK_DEADLINE"))
 				.andExpect(jsonPath("$.categories[1].category").value("MENTION"))
 				.andExpect(jsonPath("$.categories[1].push").value(true));

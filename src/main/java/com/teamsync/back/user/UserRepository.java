@@ -38,6 +38,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	// FR-206(DM 상대 목록, GET /api/dm/contacts): 워크스페이스 내 전체 사용자 중 호출자 본인만 제외한다.
 	List<User> findAllByWorkspaceIdAndIdNotOrderByNameAsc(Long workspaceId, Long excludedUserId);
 
+	// FR-406(이슈/리스크 자동 플래그) 배치 알림 대상 조회용: "프로젝트 LEADER/ADMIN" = 프로젝트별 멤버십
+	// 테이블이 없으므로(FR-301 주석과 동일 전제) 해당 프로젝트가 속한 워크스페이스의 LEADER/ADMIN 전체.
+	List<User> findAllByWorkspaceIdAndRoleIn(Long workspaceId, Collection<Role> roles);
+
 	// FR-004(통합 검색): name 또는 email에 키워드가 포함된 사용자를 워크스페이스 범위로 조회한다.
 	// keyword는 호출부에서 LIKE 와일드카드(%, _)를 이스케이프해 넘겨야 한다(ESCAPE '\' 사용).
 	@Query("SELECT u FROM User u WHERE u.workspace.id = :workspaceId "

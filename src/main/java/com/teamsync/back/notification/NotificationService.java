@@ -11,6 +11,7 @@ import com.teamsync.back.project.Project;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.TaskStatus;
+import com.teamsync.back.task.issue.TaskIssueKind;
 import com.teamsync.back.user.User;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -220,6 +221,26 @@ public class NotificationService {
 	}
 
 	/**
+	 * FR-406(이슈/리스크 자동 플래그, 완전판): 배치가 태스크+kind 조합에 새 OPEN 플래그를 만들 때, 담당자
+	 * 전원 + 프로젝트 소속 워크스페이스의 LEADER/ADMIN(recipients로 이미 합쳐서 전달됨)에게 발송한다.
+	 * recipients 중복 제거는 호출자(TaskIssueFlagBatchService)가 Set으로 미리 처리해 넘긴다.
+	 */
+	@Transactional
+	public void notifyTaskIssueFlagged(Task task, TaskIssueKind kind, String detail, Collection<User> recipients) {
+		String message = "\"" + task.getTitle() + "\" 태스크에서 이슈가 감지되었습니다(" + issueKindLabel(kind) + "): " + detail;
+		dispatch(NotificationType.TASK_ISSUE_FLAGGED, List.copyOf(recipients),
+				recipient -> new Notification(recipient, NotificationType.TASK_ISSUE_FLAGGED, message, task), message);
+	}
+
+	private static String issueKindLabel(TaskIssueKind kind) {
+		return switch (kind) {
+			case OVERDUE -> "마감 초과";
+			case STALE -> "장기 정체";
+			case BLOCKED -> "선행 태스크 미완료";
+		};
+	}
+
+	/**
 	 * FR-003 중앙 발송 헬퍼: 수신자별 category 설정을 한 번의 조회로 해석(N+1 방지)한 뒤, 채널별로 분기한다.
 	 * - inApp=true  → 기존대로 Notification row 저장(기본 true라 하위호환 유지).
 	 * - email=true  → 이메일 발송기 호출(best-effort).
@@ -259,6 +280,7 @@ public class NotificationService {
 			case TASK_STATUS_CHANGED -> "[TeamSync] 태스크 상태 변경";
 			case MENTION -> "[TeamSync] 새 멘션 알림";
 			case WEEKLY_REPORT_REMINDER -> "[TeamSync] 주간 보고 미제출 리마인드";
+			case TASK_ISSUE_FLAGGED -> "[TeamSync] 태스크 이슈 감지";
 		};
 	}
 

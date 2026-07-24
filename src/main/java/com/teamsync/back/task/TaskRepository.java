@@ -76,4 +76,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 	// FR-407(조직 롤업 대시보드) "진행 중+이슈 판정 대상": 위 findAllByProject_IdAndAssignees_IdAndStatusNot와
 	// 동일하되 담당자 구분 없이 프로젝트 전체 미완료 태스크를 조회한다.
 	List<Task> findAllByProject_IdAndStatusNot(Long projectId, TaskStatus excludedStatus);
+
+	// FR-406(이슈/리스크 자동 플래그) 배치 전용: 프로젝트 내 미완료 태스크 전체 + 담당자를 함께 로딩해
+	// (알림 발송 대상 조립 시 N+1을 피한다) id 오름차순 결정적 순서로 순회한다.
+	@EntityGraph(attributePaths = "assignees")
+	List<Task> findAllByProject_IdAndStatusNotOrderByIdAsc(Long projectId, TaskStatus excludedStatus);
 }

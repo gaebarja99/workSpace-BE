@@ -43,7 +43,7 @@ class NotificationPreferenceServiceTest {
 	}
 
 	@Test
-	void 저장값이_없으면_기본값_매트릭스로_5개_카테고리를_순서대로_반환한다() {
+	void 저장값이_없으면_기본값_매트릭스로_6개_카테고리를_순서대로_반환한다() {
 		when(preferenceRepository.findAllByUser_Id(1L)).thenReturn(List.of());
 
 		NotificationPreferencesResponse response = service.getMyPreferences(principal);
@@ -55,8 +55,9 @@ class NotificationPreferenceServiceTest {
 						NotificationCategory.MENTION,
 						NotificationCategory.TASK_ASSIGNED,
 						NotificationCategory.TASK_STATUS_CHANGED,
-						NotificationCategory.WEEKLY_REPORT);
-		// 계약 기본값 매트릭스 그대로
+						NotificationCategory.WEEKLY_REPORT,
+						NotificationCategory.TASK_ISSUE);
+		// 계약 기본값 매트릭스 그대로 (FR-406 TASK_ISSUE는 WEEKLY_REPORT와 동일한 매트릭스로 신설)
 		assertThat(categories).extracting(
 						NotificationPreferenceView::inApp,
 						NotificationPreferenceView::email,
@@ -66,7 +67,8 @@ class NotificationPreferenceServiceTest {
 						org.assertj.core.groups.Tuple.tuple(true, true, true),    // MENTION
 						org.assertj.core.groups.Tuple.tuple(true, false, false),  // TASK_ASSIGNED
 						org.assertj.core.groups.Tuple.tuple(true, false, false),  // TASK_STATUS_CHANGED
-						org.assertj.core.groups.Tuple.tuple(true, true, false));  // WEEKLY_REPORT
+						org.assertj.core.groups.Tuple.tuple(true, true, false),   // WEEKLY_REPORT
+						org.assertj.core.groups.Tuple.tuple(true, true, false));  // TASK_ISSUE
 	}
 
 	@Test
