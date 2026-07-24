@@ -31,8 +31,9 @@ import lombok.NoArgsConstructor;
 
 /**
  * FR-101(보드) / FR-102(태스크 카드) 최소 골격.
- * 라벨/첨부파일/댓글/활동로그(FR-105), 의존관계(FR-107)는 이번 범위 밖이며
- * 후속 마이그레이션/엔티티 확장으로 다룬다.
+ * 라벨/첨부파일/댓글/활동로그(FR-105)는 후속 마이그레이션/엔티티 확장으로 다룬다.
+ * 의존관계(FR-107, P2)는 TaskDependency 엔티티/TaskDependencyService로 별도 관리하며,
+ * 시각화(간트뷰) 없이 데이터 모델+CRUD API+순환 감지까지만 다룬다.
  * 담당자(assignees)는 프로젝트와 마찬가지로 User를 단방향 ManyToMany로 참조하며,
  * 체크리스트(checklistItems)는 TaskChecklistItemRepository로 직접 관리하되 조회 시
  * 이 컬렉션(OrderBy position)으로도 일관된 순서를 보장한다.
