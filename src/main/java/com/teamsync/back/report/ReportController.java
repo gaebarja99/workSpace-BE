@@ -2,7 +2,6 @@ package com.teamsync.back.report;
 
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.report.dto.NextWeekPlanUpdateRequest;
-import com.teamsync.back.report.dto.RemindResponse;
 import com.teamsync.back.report.dto.ReportHistoryItem;
 import com.teamsync.back.report.dto.TeamWeeklyReportResponse;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
@@ -22,10 +21,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * FR-401~404/408/410(P2 주간 보고 자동화) API. 모든 엔드포인트는 /api/projects/{projectId}/reports
+ * FR-401~404/410(P2 주간 보고 자동화) API. 모든 엔드포인트는 /api/projects/{projectId}/reports
  * 하위에 있으며, 개인 보고서(/me*)는 GUEST를 제외한 ADMIN/LEADER/MEMBER, 팀 보고서(/team*)는
- * ADMIN/LEADER만 호출 가능하다(계약 문서 기준). ChannelController(FR-402 하이라이트 토글)는 이 컨트롤러가
- * 아니라 채널 도메인에 그대로 둔다(핀 토글과 같은 위치/스타일 유지).
+ * ADMIN/LEADER만 호출 가능하다(계약 문서 기준).
  */
 @RestController
 @RequestMapping("/api/projects/{projectId}/reports")
@@ -72,13 +70,6 @@ public class ReportController {
 			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long projectId,
 			@RequestParam(required = false) LocalDate weekStart) {
 		return ResponseEntity.ok(weeklyReportService.publishTeamReport(principal, projectId, weekStart));
-	}
-
-	@PostMapping("/team/remind")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
-	public ResponseEntity<RemindResponse> remindTeam(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long projectId, @RequestParam(required = false) LocalDate weekStart) {
-		return ResponseEntity.ok(weeklyReportService.remindUnsubmitted(principal, projectId, weekStart));
 	}
 
 	@GetMapping("/history")

@@ -89,11 +89,6 @@ public class Task extends BaseTimeEntity {
 	@OrderBy("position ASC, id ASC")
 	private List<TaskChecklistItem> checklistItems = new ArrayList<>();
 
-	// FR-302(US-09/10): 태스크 생성/상태변경/완료 시 채널에 시스템 메시지를 자동 게시할지 여부(on/off 토글).
-	// PATCH /api/tasks/{taskId}로 변경 가능하며, 기본값은 true(항상 알린다)다.
-	@Column(name = "channel_notifications_enabled", nullable = false)
-	private boolean channelNotificationsEnabled = true;
-
 	// FR-106: 이 태스크를 자동 생성한 반복 태스크 템플릿(없으면 null). 템플릿이 삭제되면
 	// ON DELETE SET NULL로 이 참조만 사라지고 태스크 자체는 그대로 유지된다(V15 마이그레이션 참고).
 	@ManyToOne(fetch = FetchType.LAZY)
@@ -148,9 +143,5 @@ public class Task extends BaseTimeEntity {
 	public void changeAssignees(Set<User> assignees) {
 		this.assignees.clear();
 		this.assignees.addAll(assignees);
-	}
-
-	public void changeChannelNotificationsEnabled(boolean channelNotificationsEnabled) {
-		this.channelNotificationsEnabled = channelNotificationsEnabled;
 	}
 }

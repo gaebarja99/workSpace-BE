@@ -1,7 +1,6 @@
 package com.teamsync.back.task.recurrence;
 
 import com.teamsync.back.common.exception.RecurringTaskTemplateNotFoundException;
-import com.teamsync.back.notification.NotificationService;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.task.TaskActivityService;
 import com.teamsync.back.task.TaskRepository;
@@ -31,15 +30,12 @@ public class RecurringTaskGenerationService {
 	private final RecurringTaskTemplateRepository recurringTaskTemplateRepository;
 	private final TaskRepository taskRepository;
 	private final TaskActivityService taskActivityService;
-	private final NotificationService notificationService;
 
 	public RecurringTaskGenerationService(RecurringTaskTemplateRepository recurringTaskTemplateRepository,
-			TaskRepository taskRepository, TaskActivityService taskActivityService,
-			NotificationService notificationService) {
+			TaskRepository taskRepository, TaskActivityService taskActivityService) {
 		this.recurringTaskTemplateRepository = recurringTaskTemplateRepository;
 		this.taskRepository = taskRepository;
 		this.taskActivityService = taskActivityService;
-		this.notificationService = notificationService;
 	}
 
 	/**
@@ -65,10 +61,8 @@ public class RecurringTaskGenerationService {
 				template);
 		Task savedTask = taskRepository.save(task);
 
-		// 계약 문서 지시대로 기존 알림/활동로그 트리거만 그대로 재사용한다(일관성 유지). actingUserId가
-		// 없는(시스템 배치) 생성이므로 담당자 전원이 알림 대상이다.
+		// 계약 문서 지시대로 기존 활동로그 트리거는 그대로 재사용한다(일관성 유지).
 		taskActivityService.recordCreated(savedTask, template.getCreatedBy());
-		notificationService.notifyTaskAssigned(savedTask, savedTask.getAssignees(), null);
 
 		template.markGenerated(today);
 	}

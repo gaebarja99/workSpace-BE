@@ -14,13 +14,9 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
-  # FR-204 파일 아카이브 업로드 크기 제한. 필요 시 배포 환경마다 조정한다.
-  servlet:
-    multipart:
-      max-file-size: 20MB
-      max-request-size: 20MB
-  # FR-003 이메일 알림 발송용 SMTP. 기본값(빈 host)에서는 실발송을 켜지 않으므로(notification.email.enabled=false)
-  # 이 설정은 사용되지 않는다. 배포 환경에서 SMTP_HOST 등을 주입하고 NOTIFICATION_EMAIL_ENABLED=true로 켠다.
+  # 이메일 발송(구성원 초대, FR-409 보고서 내보내기)용 SMTP. 기본값(빈 host)에서는 실발송을 켜지
+  # 않으므로(email.enabled=false) 이 설정은 사용되지 않는다. 배포 환경에서 SMTP_HOST 등을 주입하고
+  # EMAIL_ENABLED=true로 켠다.
   mail:
     host: ${SMTP_HOST:}
     port: ${SMTP_PORT:587}
@@ -46,9 +42,9 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-  # FR-003 회귀 방지: spring.mail.* 자동설정이 뜨면 MailHealthIndicator가 SMTP 접속을 시도해,
+  # 회귀 방지: spring.mail.* 자동설정이 뜨면 MailHealthIndicator가 SMTP 접속을 시도해,
   # 이메일 비활성(기본) 환경에서 /actuator/health가 상시 DOWN(503)이 된다. mail health check는 끄고
-  # 실발송 여부는 notification.email.enabled로만 판단한다(핵심 API가 정상이면 health는 UP이어야 함).
+  # 실발송 여부는 email.enabled로만 판단한다(핵심 API가 정상이면 health는 UP이어야 함).
   health:
     mail:
       enabled: false
@@ -76,22 +72,13 @@ teamsync:
     mock:
       enabled: ${SSO_MOCK_ENABLED:false}
       email: ${SSO_MOCK_EMAIL:}
-  # FR-204 파일 아카이브: 현재는 로컬 디스크 저장소만 지원(docker-compose에 S3/오브젝트 스토리지
-  # 인프라 없음). 저장 루트 경로만 외부화해 후속에 S3 등으로 교체할 때 이 지점(LocalFileStorageService)만
-  # 바꾸면 되도록 한다(PRD 5.1 모듈형 모놀리스, 후속 확장 원칙).
-  storage:
-    local-base-path: ${STORAGE_LOCAL_PATH:./data/uploads}
 
-# FR-003 알림 이메일/푸시 발송기 설정(SSO의 실/Mock 전환 선례를 따름).
-# email/push 모두 기본 비활성(로그 Mock)이며, 배포 env에서 켠다.
-# - email.enabled=true & 위 spring.mail SMTP 설정 존재 시 JavaMailSender 실발송, 그 외에는 로그 Mock.
-# - push는 FCM 자격증명 부재로 항상 로그 Mock(enabled 값은 로그에만 표시).
-notification:
-  email:
-    enabled: ${NOTIFICATION_EMAIL_ENABLED:false}
-    from: ${NOTIFICATION_EMAIL_FROM:no-reply@teamsync.local}
-  push:
-    enabled: ${NOTIFICATION_PUSH_ENABLED:false}
+# 이메일 발송기 설정(SSO의 실/Mock 전환 선례를 따름). 구성원 초대 메일과 FR-409 보고서 내보내기
+# 이메일에 공통으로 쓰인다. 기본 비활성(로그 Mock)이며, 배포 env에서 켠다.
+# email.enabled=true & 위 spring.mail SMTP 설정 존재 시 JavaMailSender 실발송, 그 외에는 로그 Mock.
+email:
+  enabled: ${EMAIL_ENABLED:false}
+  from: ${EMAIL_FROM:no-reply@teamsync.local}
 
 # 구성원 관리(P1): 초대 이메일에 담을 프론트엔드 링크(예: {frontend-base-url}/invite/{token}) 베이스 URL.
 app:

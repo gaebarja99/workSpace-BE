@@ -8,11 +8,11 @@ import com.teamsync.back.auth.JwtTokenProvider;
 import com.teamsync.back.common.exception.DuplicateInvitationException;
 import com.teamsync.back.common.exception.DuplicateMemberException;
 import com.teamsync.back.common.exception.InvalidInvitationRoleException;
+import com.teamsync.back.email.EmailSender;
 import com.teamsync.back.invitation.dto.InvitationCreateRequest;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.UserRepository;
 import com.teamsync.back.workspace.WorkspaceRepository;
-import com.teamsync.back.notification.sender.EmailNotificationSender;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +38,7 @@ class InvitationServiceTest {
 	private WorkspaceRepository workspaceRepository;
 
 	@Mock
-	private EmailNotificationSender emailNotificationSender;
+	private EmailSender emailNotificationSender;
 
 	@Mock
 	private PasswordEncoder passwordEncoder;

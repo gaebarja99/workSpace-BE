@@ -34,8 +34,11 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
-	// FR-003 이메일 알림 발송(JavaMailSender). notification.email.enabled=true & SMTP 설정 시에만 실발송.
+	// 이메일 발송(JavaMailSender, 구성원 초대/FR-409 보고서 내보내기). email.enabled=true & SMTP 설정 시에만 실발송.
 	implementation("org.springframework.boot:spring-boot-starter-mail")
+	// FR-409 보고서 PDF 내보내기: HTML/CSS -> PDF 렌더링. LGPL 2.1+, Java 21 호환(순수 자바, PDFBox 기반).
+	implementation("com.openhtmltopdf:openhtmltopdf-pdfbox:1.0.10")
+	implementation("com.openhtmltopdf:openhtmltopdf-slf4j:1.0.10")
 
 	implementation("org.flywaydb:flyway-core")
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")

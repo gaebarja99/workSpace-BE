@@ -41,8 +41,7 @@ public class ReportTemplateService {
 	// 표준 섹션(MANUAL 제외) 4종의 기본 한국어 제목 + 생성 순서. FE 정적 목업(admin-templates,
 	// report/editor)에서 이미 쓰인 표현을 그대로 재사용해 일관성을 맞춘다.
 	private static final List<ReportSectionKey> DEFAULT_SECTION_KEYS = List.of(
-			ReportSectionKey.COMPLETED, ReportSectionKey.IN_PROGRESS, ReportSectionKey.HIGHLIGHTS,
-			ReportSectionKey.ISSUES);
+			ReportSectionKey.COMPLETED, ReportSectionKey.IN_PROGRESS, ReportSectionKey.ISSUES);
 
 	private final ReportTemplateRepository reportTemplateRepository;
 	private final ReportTemplateSectionRepository reportTemplateSectionRepository;
@@ -62,7 +61,6 @@ public class ReportTemplateService {
 		return switch (key) {
 			case COMPLETED -> "완료한 일";
 			case IN_PROGRESS -> "진행 중인 일";
-			case HIGHLIGHTS -> "이번 주 하이라이트";
 			case ISSUES -> "이슈 및 리스크";
 			case MANUAL -> "새 섹션";
 		};

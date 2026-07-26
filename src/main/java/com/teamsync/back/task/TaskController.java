@@ -12,8 +12,6 @@ import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskDependencyCreateRequest;
 import com.teamsync.back.task.dto.TaskDependencyListResponse;
 import com.teamsync.back.task.dto.TaskDependencyResponse;
-import com.teamsync.back.task.dto.TaskFileLinkRequest;
-import com.teamsync.back.task.dto.TaskFileLinkResponse;
 import com.teamsync.back.task.dto.TaskResponse;
 import com.teamsync.back.task.dto.TaskSummaryResponse;
 import com.teamsync.back.task.dto.TaskUpdateRequest;
@@ -115,29 +113,7 @@ public class TaskController {
 		return ResponseEntity.noContent().build();
 	}
 
-	// FR-304(US-09): 채널/아카이브 업로드 파일을 재업로드 없이 태스크에 "링크"만 한다.
-	@GetMapping("/api/tasks/{taskId}/files")
-	public ResponseEntity<List<TaskFileLinkResponse>> listFiles(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long taskId) {
-		return ResponseEntity.ok(taskService.listTaskFiles(principal, taskId));
-	}
-
-	@PostMapping("/api/tasks/{taskId}/files")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
-	public ResponseEntity<TaskFileLinkResponse> linkFile(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long taskId, @Valid @RequestBody TaskFileLinkRequest request) {
-		return ResponseEntity.status(HttpStatus.CREATED).body(taskService.linkTaskFile(principal, taskId, request));
-	}
-
-	@DeleteMapping("/api/tasks/{taskId}/files/{archivedFileId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
-	public ResponseEntity<Void> unlinkFile(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long taskId, @PathVariable Long archivedFileId) {
-		taskService.unlinkTaskFile(principal, taskId, archivedFileId);
-		return ResponseEntity.noContent().build();
-	}
-
-	// FR-305(US-10): 태스크 댓글 작성 시 연결된 채널 스레드(FR-303)에도 동일 내용이 자동 게시된다.
+	// FR-305(US-10): 태스크 댓글.
 	@GetMapping("/api/tasks/{taskId}/comments")
 	public ResponseEntity<List<TaskCommentResponse>> listComments(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long taskId) {

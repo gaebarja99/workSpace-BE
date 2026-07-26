@@ -8,13 +8,15 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.channel.message.MessageRepository;
 import com.teamsync.back.common.exception.InvalidReportRequestException;
-import com.teamsync.back.notification.NotificationService;
+import com.teamsync.back.common.exception.TeamWeeklyReportNotFoundException;
+import com.teamsync.back.common.exception.WeeklyReportNotFoundException;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.project.ProjectStatus;
 import com.teamsync.back.report.dto.RollupResponse;
+import com.teamsync.back.report.dto.TeamWeeklyReportExportView;
+import com.teamsync.back.report.dto.WeeklyReportExportView;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.task.TaskPriority;
 import com.teamsync.back.task.TaskRepository;
@@ -27,6 +29,7 @@ import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,12 +61,6 @@ class WeeklyReportServiceTest {
 	@Mock
 	private TaskRepository taskRepository;
 
-	@Mock
-	private MessageRepository messageRepository;
-
-	@Mock
-	private NotificationService notificationService;
-
 	private WeeklyReportService weeklyReportService;
 	private Workspace workspace;
 	private AuthenticatedUser adminPrincipal;
@@ -74,7 +71,7 @@ class WeeklyReportServiceTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		weeklyReportService = new WeeklyReportService(weeklyReportRepository, teamWeeklyReportRepository,
-				projectRepository, userRepository, taskRepository, messageRepository, notificationService);
+				projectRepository, userRepository, taskRepository);
 		workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
 		adminPrincipal = new AuthenticatedUser(1L, 10L, "admin@growtech.io", Role.ADMIN);
@@ -152,6 +149,119 @@ class WeeklyReportServiceTest {
 		assertThat(response.teams().get(0).completionRate()).isZero();
 		assertThat(response.teams().get(0).overdueRate()).isZero();
 		assertThat(response.orgCompletionRate()).isZero();
+	}
+
+	// ----- FR-409(보고서 내보내기) 권한 검증: "본인 또는 같은 워크스페이스 LEADER/ADMIN만 허용" -----
+
+	@Test
+	void 개인_보고서_내보내기_본인이면_허용() throws Exception {
+		Project project = newProject("개발팀 프로젝트");
+		setId(project, 100L);
+		User owner = newUser("작성자", Role.MEMBER);
+		setId(owner, 5L);
+		WeeklyReport report = new WeeklyReport(project, owner, WEEK_START, WEEK_END);
+		setId(report, 900L);
+		stubEmptyAutoSections(100L, 5L);
+		when(weeklyReportRepository.findById(900L)).thenReturn(Optional.of(report));
+
+		AuthenticatedUser ownerPrincipal = new AuthenticatedUser(5L, 10L, "author@growtech.io", Role.MEMBER);
+		WeeklyReportExportView view = weeklyReportService.getReportForExport(ownerPrincipal, 900L);
+
+		assertThat(view.projectName()).isEqualTo("개발팀 프로젝트");
+		assertThat(view.authorName()).isEqualTo("작성자");
+		assertThat(view.report().id()).isEqualTo(900L);
+	}
+
+	@Test
+	void 개인_보고서_내보내기_같은_워크스페이스_LEADER는_타인_보고서도_허용() throws Exception {
+		Project project = newProject("개발팀 프로젝트");
+		setId(project, 100L);
+		User owner = newUser("작성자", Role.MEMBER);
+		setId(owner, 5L);
+		WeeklyReport report = new WeeklyReport(project, owner, WEEK_START, WEEK_END);
+		setId(report, 900L);
+		stubEmptyAutoSections(100L, 5L);
+		when(weeklyReportRepository.findById(900L)).thenReturn(Optional.of(report));
+
+		AuthenticatedUser leaderPrincipal = new AuthenticatedUser(99L, 10L, "leader@growtech.io", Role.LEADER);
+		WeeklyReportExportView view = weeklyReportService.getReportForExport(leaderPrincipal, 900L);
+
+		assertThat(view.authorName()).isEqualTo("작성자");
+	}
+
+	@Test
+	void 개인_보고서_내보내기_타인_보고서를_일반_멤버가_요청하면_404() throws Exception {
+		Project project = newProject("개발팀 프로젝트");
+		setId(project, 100L);
+		User owner = newUser("작성자", Role.MEMBER);
+		setId(owner, 5L);
+		WeeklyReport report = new WeeklyReport(project, owner, WEEK_START, WEEK_END);
+		setId(report, 900L);
+		when(weeklyReportRepository.findById(900L)).thenReturn(Optional.of(report));
+
+		AuthenticatedUser otherMemberPrincipal = new AuthenticatedUser(6L, 10L, "other@growtech.io", Role.MEMBER);
+
+		assertThatThrownBy(() -> weeklyReportService.getReportForExport(otherMemberPrincipal, 900L))
+				.isInstanceOf(WeeklyReportNotFoundException.class);
+	}
+
+	@Test
+	void 개인_보고서_내보내기_다른_워크스페이스면_404() throws Exception {
+		Workspace otherWorkspace = new Workspace("다른회사", "other.io");
+		setId(otherWorkspace, 20L);
+		Project otherProject = new Project(otherWorkspace, "다른 워크스페이스 프로젝트", "설명", null);
+		setId(otherProject, 200L);
+		User owner = newUser("작성자", Role.MEMBER);
+		setId(owner, 5L);
+		WeeklyReport report = new WeeklyReport(otherProject, owner, WEEK_START, WEEK_END);
+		setId(report, 901L);
+		when(weeklyReportRepository.findById(901L)).thenReturn(Optional.of(report));
+
+		assertThatThrownBy(() -> weeklyReportService.getReportForExport(adminPrincipal, 901L))
+				.isInstanceOf(WeeklyReportNotFoundException.class);
+	}
+
+	@Test
+	void 팀_보고서_내보내기_다른_워크스페이스면_404() throws Exception {
+		Workspace otherWorkspace = new Workspace("다른회사", "other.io");
+		setId(otherWorkspace, 20L);
+		Project otherProject = new Project(otherWorkspace, "다른 워크스페이스 프로젝트", "설명", null);
+		setId(otherProject, 200L);
+		User publisher = newUser("발행자", Role.LEADER);
+		setId(publisher, 7L);
+		TeamWeeklyReport teamReport = new TeamWeeklyReport(otherProject, WEEK_START, WEEK_END, publisher);
+		setId(teamReport, 950L);
+		when(teamWeeklyReportRepository.findById(950L)).thenReturn(Optional.of(teamReport));
+
+		assertThatThrownBy(() -> weeklyReportService.getTeamReportForExport(adminPrincipal, 950L))
+				.isInstanceOf(TeamWeeklyReportNotFoundException.class);
+	}
+
+	@Test
+	void 팀_보고서_내보내기_같은_워크스페이스면_집계_결과를_반환한다() throws Exception {
+		Project project = newProject("개발팀 프로젝트");
+		setId(project, 100L);
+		User publisher = newUser("발행자", Role.LEADER);
+		setId(publisher, 7L);
+		TeamWeeklyReport teamReport = new TeamWeeklyReport(project, WEEK_START, WEEK_END, publisher);
+		setId(teamReport, 950L);
+		when(teamWeeklyReportRepository.findById(950L)).thenReturn(Optional.of(teamReport));
+		when(userRepository.findAllByWorkspaceIdOrderByNameAsc(10L)).thenReturn(List.of()); // 멤버 0명으로 단순화.
+		when(teamWeeklyReportRepository.findByProject_IdAndWeekStart(100L, WEEK_START)).thenReturn(Optional.of(teamReport));
+
+		TeamWeeklyReportExportView view = weeklyReportService.getTeamReportForExport(adminPrincipal, 950L);
+
+		assertThat(view.projectName()).isEqualTo("개발팀 프로젝트");
+		assertThat(view.report().publishedByName()).isEqualTo("발행자");
+		assertThat(view.report().members()).isEmpty();
+	}
+
+	/** toResponse() 내부의 자동 계산 섹션(완료/진행) 조회를 전부 빈 목록으로 고정한다. */
+	private void stubEmptyAutoSections(Long projectId, Long userId) {
+		when(taskRepository.findAllByProject_IdAndAssignees_IdAndStatusAndUpdatedAtBetween(
+				eq(projectId), eq(userId), eq(TaskStatus.DONE), any(), any())).thenReturn(List.of());
+		when(taskRepository.findAllByProject_IdAndAssignees_IdAndStatusNot(eq(projectId), eq(userId), eq(TaskStatus.DONE)))
+				.thenReturn(List.of());
 	}
 
 	private Project newProject(String name) {

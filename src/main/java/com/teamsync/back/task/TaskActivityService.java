@@ -1,6 +1,5 @@
 package com.teamsync.back.task;
 
-import com.teamsync.back.notification.TaskStatusLabels;
 import com.teamsync.back.user.User;
 import java.util.Collection;
 import java.util.stream.Collectors;

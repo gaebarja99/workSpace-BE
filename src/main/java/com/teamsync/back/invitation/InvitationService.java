@@ -9,11 +9,11 @@ import com.teamsync.back.common.exception.DuplicateMemberException;
 import com.teamsync.back.common.exception.InvalidInvitationException;
 import com.teamsync.back.common.exception.InvalidInvitationRoleException;
 import com.teamsync.back.common.exception.InvitationNotFoundException;
+import com.teamsync.back.email.EmailSender;
 import com.teamsync.back.invitation.dto.InvitationCreateRequest;
 import com.teamsync.back.invitation.dto.InvitationPreviewResponse;
 import com.teamsync.back.invitation.dto.InvitationResponse;
 import com.teamsync.back.invitation.dto.InvitationSignupRequest;
-import com.teamsync.back.notification.sender.EmailNotificationSender;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 구성원 관리/초대·승인(P1): 관리자 초대 발급/조회/철회, 초대 토큰 공개 조회, 토큰 기반 가입.
  * 기존 도메인 자동가입(AuthService.signup/SsoService.exchange)과는 별개의 경로이며,
- * 초대 대상은 가입 전까지 User가 아니다(EmailNotificationSender의 이메일 문자열 오버로드로 발송).
+ * 초대 대상은 가입 전까지 User가 아니다(EmailSender의 이메일 문자열 오버로드로 발송).
  */
 @Service
 public class InvitationService {
@@ -40,13 +40,13 @@ public class InvitationService {
 	private final InvitationRepository invitationRepository;
 	private final UserRepository userRepository;
 	private final WorkspaceRepository workspaceRepository;
-	private final EmailNotificationSender emailNotificationSender;
+	private final EmailSender emailNotificationSender;
 	private final InvitationProperties invitationProperties;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
 
 	public InvitationService(InvitationRepository invitationRepository, UserRepository userRepository,
-			WorkspaceRepository workspaceRepository, EmailNotificationSender emailNotificationSender,
+			WorkspaceRepository workspaceRepository, EmailSender emailNotificationSender,
 			InvitationProperties invitationProperties, PasswordEncoder passwordEncoder,
 			JwtTokenProvider jwtTokenProvider) {
 		this.invitationRepository = invitationRepository;

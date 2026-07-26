@@ -4,10 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
-import com.teamsync.back.archive.ArchiveItemRepository;
-import com.teamsync.back.archive.file.ArchivedFileRepository;
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.channel.ChannelRepository;
 import com.teamsync.back.common.exception.ProjectHasDependenciesException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
 import com.teamsync.back.report.TeamWeeklyReportRepository;
@@ -46,15 +43,6 @@ class ProjectServiceTest {
 	private TaskRepository taskRepository;
 
 	@Mock
-	private ChannelRepository channelRepository;
-
-	@Mock
-	private ArchiveItemRepository archiveItemRepository;
-
-	@Mock
-	private ArchivedFileRepository archivedFileRepository;
-
-	@Mock
 	private WeeklyReportRepository weeklyReportRepository;
 
 	@Mock
@@ -70,8 +58,7 @@ class ProjectServiceTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		projectService = new ProjectService(projectRepository, workspaceRepository, userRepository, taskRepository,
-				channelRepository, archiveItemRepository, archivedFileRepository, weeklyReportRepository,
-				teamWeeklyReportRepository, recurringTaskTemplateRepository);
+				weeklyReportRepository, teamWeeklyReportRepository, recurringTaskTemplateRepository);
 		workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
 		adminPrincipal = new AuthenticatedUser(1L, 10L, "admin@growtech.io", Role.ADMIN);

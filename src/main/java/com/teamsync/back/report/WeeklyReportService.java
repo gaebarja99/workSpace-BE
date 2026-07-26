@@ -1,30 +1,29 @@
 package com.teamsync.back.report;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.channel.message.Message;
-import com.teamsync.back.channel.message.MessageRepository;
 import com.teamsync.back.common.exception.InvalidReportRequestException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
+import com.teamsync.back.common.exception.TeamWeeklyReportNotFoundException;
 import com.teamsync.back.common.exception.WeeklyReportAlreadySubmittedException;
-import com.teamsync.back.notification.NotificationService;
+import com.teamsync.back.common.exception.WeeklyReportNotFoundException;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.project.ProjectStatus;
 import com.teamsync.back.report.dto.CompletedTaskItem;
-import com.teamsync.back.report.dto.HighlightItem;
 import com.teamsync.back.report.dto.InProgressTaskItem;
 import com.teamsync.back.report.dto.IssueItem;
 import com.teamsync.back.report.dto.IssueKind;
 import com.teamsync.back.report.dto.MemberSubmissionStatus;
 import com.teamsync.back.report.dto.NextWeekPlanUpdateRequest;
-import com.teamsync.back.report.dto.RemindResponse;
 import com.teamsync.back.report.dto.ReportHistoryItem;
 import com.teamsync.back.report.dto.ReportHistoryStatus;
 import com.teamsync.back.report.dto.RollupResponse;
 import com.teamsync.back.report.dto.RollupTeamItem;
 import com.teamsync.back.report.dto.RollupTrendItem;
 import com.teamsync.back.report.dto.TeamMemberReportSummary;
+import com.teamsync.back.report.dto.TeamWeeklyReportExportView;
 import com.teamsync.back.report.dto.TeamWeeklyReportResponse;
+import com.teamsync.back.report.dto.WeeklyReportExportView;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.task.TaskRepository;
@@ -44,16 +43,18 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-401~404/408/410(P2 주간 보고 자동화). 계약 문서(p2-weekly-report-contract.md) 기준 원칙:
- * 완료/진행/하이라이트/이슈 섹션은 WeeklyReport/TeamWeeklyReport 어디에도 스냅샷하지 않고 매 요청마다
- * project(+user)+weekStart~weekEnd 범위로 실시간 계산한다. FR-405/406/407/409(P3)는 이번 스코프 밖이며,
- * 계약 문서에 명시된 "3주 이상 정체(STALE)" 플래그만 FR-401 이슈 섹션의 축소판으로 포함한다.
+ * FR-401~404/409/410(P2 주간 보고 자동화 + P3 내보내기). 계약 문서(p2-weekly-report-contract.md)
+ * 기준 원칙: 완료/진행/이슈 섹션은 WeeklyReport/TeamWeeklyReport 어디에도 스냅샷하지 않고
+ * 매 요청마다 project(+user)+weekStart~weekEnd 범위로 실시간 계산한다. 계약 문서에 명시된
+ * "3주 이상 정체(STALE)" 플래그만 FR-401 이슈 섹션의 축소판으로 포함한다. FR-409(보고서 내보내기)는
+ * 이 서비스가 이미 만들어 둔 toResponse/buildTeamResponse 계산 결과를 그대로 재사용하고(별도
+ * 스냅샷/재계산 로직을 새로 만들지 않음), reportId로 직접 조회하는 getReportForExport/getTeamReportForExport
+ * 두 메서드만 추가한다(ReportExportService가 호출). 팀 채팅(하이라이트)/알림(미제출 리마인드) 기능 제거에 따라
+ * 하이라이트 섹션과 리마인드(수동/자동 배치) 기능은 더 이상 지원하지 않는다.
  */
 @Service
 public class WeeklyReportService {
@@ -67,20 +68,15 @@ public class WeeklyReportService {
 	private final ProjectRepository projectRepository;
 	private final UserRepository userRepository;
 	private final TaskRepository taskRepository;
-	private final MessageRepository messageRepository;
-	private final NotificationService notificationService;
 
 	public WeeklyReportService(WeeklyReportRepository weeklyReportRepository,
 			TeamWeeklyReportRepository teamWeeklyReportRepository, ProjectRepository projectRepository,
-			UserRepository userRepository, TaskRepository taskRepository, MessageRepository messageRepository,
-			NotificationService notificationService) {
+			UserRepository userRepository, TaskRepository taskRepository) {
 		this.weeklyReportRepository = weeklyReportRepository;
 		this.teamWeeklyReportRepository = teamWeeklyReportRepository;
 		this.projectRepository = projectRepository;
 		this.userRepository = userRepository;
 		this.taskRepository = taskRepository;
-		this.messageRepository = messageRepository;
-		this.notificationService = notificationService;
 	}
 
 	// ----- FR-401/403: 개인 보고서 -----
@@ -121,7 +117,7 @@ public class WeeklyReportService {
 		return toResponse(report);
 	}
 
-	// ----- FR-404/408: 팀 보고서 -----
+	// ----- FR-404: 팀 보고서 -----
 
 	@Transactional
 	public TeamWeeklyReportResponse getTeamReport(AuthenticatedUser principal, Long projectId, LocalDate weekStartParam) {
@@ -145,42 +141,6 @@ public class WeeklyReportService {
 								.save(new TeamWeeklyReport(project, weekStart, weekEnd, publishedBy)));
 
 		return buildTeamResponse(project, weekStart);
-	}
-
-	@Transactional
-	public RemindResponse remindUnsubmitted(AuthenticatedUser principal, Long projectId, LocalDate weekStartParam) {
-		Project project = getProjectInWorkspace(principal, projectId);
-		LocalDate weekStart = resolveWeekStart(weekStartParam);
-
-		List<User> unsubmitted = findUnsubmittedMembers(principal.workspaceId(), projectId, weekStart);
-		// FR-408 수동 재발송: 멱등성 체크 없이 매번 즉시 발송(계약 문서 명시).
-		for (User member : unsubmitted) {
-			notificationService.notifyWeeklyReportReminder(project, member);
-		}
-		return new RemindResponse(unsubmitted.size());
-	}
-
-	/**
-	 * FR-408 자동 배치: 매주 금요일 09:00 KST, 시스템 전역(모든 워크스페이스/프로젝트) 대상. 같은
-	 * 주/같은 타입(WEEKLY_REPORT_REMINDER)으로 이미 발송된 수신자는 스킵한다(NotificationService의
-	 * 멱등성 검사, 계약 문서: "제출 마감 시간 설정" UI는 이번 스코프 제외 — 금요일 18:00 KST 고정값 문서화만).
-	 * 존재하지 않는 프로젝트가 대량으로 있어도 이 배치는 프로젝트 수 x 워크스페이스 인원 수준의 트래픽이라
-	 * FR-108 마감 임박 배치(전 태스크 순회)와 동일한 수준의 비용으로 간주해 별도 페이징 없이 처리한다.
-	 */
-	@Scheduled(cron = "0 0 9 * * FRI", zone = "Asia/Seoul")
-	@Transactional
-	public void remindUnsubmittedReports() {
-		LocalDate weekStart = currentWeekStart();
-		LocalDate weekEnd = weekEndOf(weekStart);
-		LocalDateTime rangeStart = weekStart.atStartOfDay();
-		LocalDateTime rangeEndExclusive = weekEnd.plusDays(1).atStartOfDay();
-
-		for (Project project : projectRepository.findAll()) {
-			List<User> unsubmitted = findUnsubmittedMembers(project.getWorkspace().getId(), project.getId(), weekStart);
-			for (User member : unsubmitted) {
-				notificationService.notifyWeeklyReportReminderIfNeeded(project, member, rangeStart, rangeEndExclusive);
-			}
-		}
 	}
 
 	// ----- FR-410: 보고 이력 -----
@@ -208,7 +168,7 @@ public class WeeklyReportService {
 		List<ReportHistoryItem> result = new ArrayList<>();
 		for (LocalDate weekStart : candidateWeeks) {
 			LocalDate weekEnd = weekEndOf(weekStart);
-			if (keyword != null && !matchesKeyword(projectId, weekStart, weekEnd, keyword)) {
+			if (keyword != null && !matchesKeyword(projectId, weekStart, keyword)) {
 				continue;
 			}
 
@@ -224,6 +184,45 @@ public class WeeklyReportService {
 					(int) submittedCount, totalMemberCount, completionRate, issueCount));
 		}
 		return result;
+	}
+
+	// ----- FR-409: 보고서 내보내기(PDF/이메일) -----
+
+	/**
+	 * reportId로 개인 주간 보고서를 직접 조회한다. GET /reports/me와 달리 "본인 소유가 아닌 보고서"도
+	 * 조회 대상이 될 수 있어(계약: "본인 또는 같은 워크스페이스 LEADER/ADMIN만 허용") project+weekStart
+	 * 기반 조회 대신 PK로 직접 찾는다. 워크스페이스 불일치·권한 부족 모두 동일하게 404로 응답해
+	 * 리소스 존재 여부를 숨긴다(ReportTemplateNotFoundException 등과 동일 원칙, PRD 5.6).
+	 */
+	@Transactional(readOnly = true)
+	public WeeklyReportExportView getReportForExport(AuthenticatedUser principal, Long reportId) {
+		WeeklyReport report = weeklyReportRepository.findById(reportId)
+				.filter(r -> r.getProject().getWorkspace().getId().equals(principal.workspaceId()))
+				.orElseThrow(WeeklyReportNotFoundException::new);
+
+		boolean isOwner = report.getUser().getId().equals(principal.userId());
+		boolean isLeaderOrAdmin = principal.role() == Role.ADMIN || principal.role() == Role.LEADER;
+		if (!isOwner && !isLeaderOrAdmin) {
+			throw new WeeklyReportNotFoundException();
+		}
+
+		return new WeeklyReportExportView(toResponse(report), report.getProject().getName(),
+				report.getUser().getName(), report.getUser().getEmail());
+	}
+
+	/**
+	 * teamReportId(TeamWeeklyReport PK)로 팀 주간 보고를 직접 조회한다. LEADER/ADMIN 제한은
+	 * 컨트롤러의 @PreAuthorize가 이미 담당하므로(GET /reports/team과 동일 패턴) 여기서는
+	 * 워크스페이스 스코핑만 검증한다. 집계 내용은 buildTeamResponse로 그대로 재계산해 재사용한다.
+	 */
+	@Transactional(readOnly = true)
+	public TeamWeeklyReportExportView getTeamReportForExport(AuthenticatedUser principal, Long teamReportId) {
+		TeamWeeklyReport teamReport = teamWeeklyReportRepository.findById(teamReportId)
+				.filter(t -> t.getProject().getWorkspace().getId().equals(principal.workspaceId()))
+				.orElseThrow(TeamWeeklyReportNotFoundException::new);
+
+		Project project = teamReport.getProject();
+		return new TeamWeeklyReportExportView(buildTeamResponse(project, teamReport.getWeekStart()), project.getName());
 	}
 
 	// ----- FR-407: 조직 롤업 대시보드 -----
@@ -357,12 +356,11 @@ public class WeeklyReportService {
 		LocalDate weekEnd = report.getWeekEnd();
 
 		AutoTaskSections sections = computeAutoTaskSections(projectId, report.getUser().getId(), weekStart, weekEnd);
-		List<HighlightItem> highlights = computeHighlights(projectId, weekStart, weekEnd);
 
 		return new WeeklyReportResponse(
 				report.getId(), projectId, weekStart, weekEnd, report.getStatus(), report.getNextWeekPlan(),
 				report.getSubmittedAt(), report.getUpdatedAt(),
-				sections.completed(), sections.inProgress(), highlights, sections.issues());
+				sections.completed(), sections.inProgress(), sections.issues());
 	}
 
 	private TeamWeeklyReportResponse buildTeamResponse(Project project, LocalDate weekStart) {
@@ -407,15 +405,6 @@ public class WeeklyReportService {
 				submittedCount, members.size(), teamCompletedCount, teamIssueCount, memberSummaries);
 	}
 
-	private List<User> findUnsubmittedMembers(Long workspaceId, Long projectId, LocalDate weekStart) {
-		List<User> members = reportMembers(workspaceId);
-		Set<Long> submittedUserIds = weeklyReportRepository.findAllByProject_IdAndWeekStart(projectId, weekStart).stream()
-				.filter(r -> r.getStatus() == WeeklyReportStatus.SUBMITTED)
-				.map(r -> r.getUser().getId())
-				.collect(Collectors.toSet());
-		return members.stream().filter(m -> !submittedUserIds.contains(m.getId())).toList();
-	}
-
 	private int countTeamIssues(Project project, LocalDate weekStart, LocalDate weekEnd) {
 		List<User> members = reportMembers(project.getWorkspace().getId());
 		int total = 0;
@@ -425,13 +414,8 @@ public class WeeklyReportService {
 		return total;
 	}
 
-	private boolean matchesKeyword(Long projectId, LocalDate weekStart, LocalDate weekEnd, String keyword) {
-		if (weeklyReportRepository.existsNextWeekPlanMatch(projectId, weekStart, keyword)) {
-			return true;
-		}
-		LocalDateTime start = weekStart.atStartOfDay();
-		LocalDateTime end = weekEnd.plusDays(1).atStartOfDay();
-		return messageRepository.existsHighlightedContentMatch(projectId, start, end, keyword);
+	private boolean matchesKeyword(Long projectId, LocalDate weekStart, String keyword) {
+		return weeklyReportRepository.existsNextWeekPlanMatch(projectId, weekStart, keyword);
 	}
 
 	/**
@@ -477,20 +461,6 @@ public class WeeklyReportService {
 		}
 
 		return new AutoTaskSections(completed, inProgress, issues);
-	}
-
-	private List<HighlightItem> computeHighlights(Long projectId, LocalDate weekStart, LocalDate weekEnd) {
-		LocalDateTime rangeStart = weekStart.atStartOfDay();
-		LocalDateTime rangeEndExclusive = weekEnd.plusDays(1).atStartOfDay();
-		return messageRepository.findHighlightsForProjectAndWeek(projectId, rangeStart, rangeEndExclusive).stream()
-				.map(this::toHighlightItem)
-				.toList();
-	}
-
-	private HighlightItem toHighlightItem(Message message) {
-		String authorName = message.getAuthor() != null ? message.getAuthor().getName() : "시스템";
-		return new HighlightItem(message.getId(), message.getChannel().getId(), message.getChannel().getName(),
-				authorName, message.getContent(), message.getCreatedAt());
 	}
 
 	private static boolean isInRange(LocalDateTime value, LocalDateTime startInclusive, LocalDateTime endExclusive) {
