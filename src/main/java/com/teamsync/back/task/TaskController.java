@@ -14,6 +14,7 @@ import com.teamsync.back.task.dto.TaskDependencyListResponse;
 import com.teamsync.back.task.dto.TaskDependencyResponse;
 import com.teamsync.back.task.dto.TaskResponse;
 import com.teamsync.back.task.dto.TaskSummaryResponse;
+import com.teamsync.back.task.dto.TaskSummaryStatsResponse;
 import com.teamsync.back.task.dto.TaskUpdateRequest;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -57,6 +58,14 @@ public class TaskController {
 	public ResponseEntity<List<TaskSummaryResponse>> list(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long projectId) {
 		return ResponseEntity.ok(taskService.listTasks(principal, projectId));
+	}
+
+	// FR-101/FR-102(보드 상태 집계 요약): 프로젝트별 태스크 상태 카운트 + 완료 비율.
+	// "/api/projects/{projectId}/tasks" 목록 GET과 동일한 방식(워크스페이스 소속이면 GUEST 포함 조회 가능)을 따른다.
+	@GetMapping("/api/projects/{projectId}/tasks/summary")
+	public ResponseEntity<TaskSummaryStatsResponse> summary(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long projectId) {
+		return ResponseEntity.ok(taskService.getTaskSummaryStats(principal, projectId));
 	}
 
 	// FR-104(담당자별 대시보드, US-01 "내 업무"): 정적 경로("me")이므로 Spring MVC가

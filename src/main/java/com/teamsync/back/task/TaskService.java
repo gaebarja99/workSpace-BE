@@ -18,6 +18,7 @@ import com.teamsync.back.task.dto.TaskCommentResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskResponse;
 import com.teamsync.back.task.dto.TaskSummaryResponse;
+import com.teamsync.back.task.dto.TaskSummaryStatsResponse;
 import com.teamsync.back.task.dto.TaskUpdateRequest;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
@@ -90,6 +91,19 @@ public class TaskService {
 		return taskRepository.findAllByProjectIdOrderByDueDateAscIdAsc(projectId).stream()
 				.map(TaskSummaryResponse::from)
 				.toList();
+	}
+
+	// FR-101/FR-102(보드 상태 집계 요약): 프로젝트에 속한 태스크를 status별로 카운트하고
+	// 완료 비율(progressPercent)을 계산한다. 조회 권한은 listTasks와 동일(워크스페이스 소속이면
+	// GUEST 포함 누구나 조회 가능)하다.
+	@Transactional(readOnly = true)
+	public TaskSummaryStatsResponse getTaskSummaryStats(AuthenticatedUser principal, Long projectId) {
+		getProjectInWorkspace(principal, projectId);
+		long todo = taskRepository.countByProject_IdAndStatus(projectId, TaskStatus.TODO);
+		long inProgress = taskRepository.countByProject_IdAndStatus(projectId, TaskStatus.IN_PROGRESS);
+		long review = taskRepository.countByProject_IdAndStatus(projectId, TaskStatus.REVIEW);
+		long done = taskRepository.countByProject_IdAndStatus(projectId, TaskStatus.DONE);
+		return TaskSummaryStatsResponse.of(todo, inProgress, review, done);
 	}
 
 	@Transactional(readOnly = true)
