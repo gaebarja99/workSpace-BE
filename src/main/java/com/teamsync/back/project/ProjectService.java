@@ -8,8 +8,6 @@ import com.teamsync.back.project.dto.ProjectAdminResponse;
 import com.teamsync.back.project.dto.ProjectCreateRequest;
 import com.teamsync.back.project.dto.ProjectResponse;
 import com.teamsync.back.project.dto.ProjectStatsResponse;
-import com.teamsync.back.report.TeamWeeklyReportRepository;
-import com.teamsync.back.report.WeeklyReportRepository;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
 import com.teamsync.back.user.User;
@@ -33,20 +31,15 @@ public class ProjectService {
 	private final WorkspaceRepository workspaceRepository;
 	private final UserRepository userRepository;
 	private final TaskRepository taskRepository;
-	private final WeeklyReportRepository weeklyReportRepository;
-	private final TeamWeeklyReportRepository teamWeeklyReportRepository;
 	private final RecurringTaskTemplateRepository recurringTaskTemplateRepository;
 
 	public ProjectService(ProjectRepository projectRepository, WorkspaceRepository workspaceRepository,
 			UserRepository userRepository, TaskRepository taskRepository,
-			WeeklyReportRepository weeklyReportRepository, TeamWeeklyReportRepository teamWeeklyReportRepository,
 			RecurringTaskTemplateRepository recurringTaskTemplateRepository) {
 		this.projectRepository = projectRepository;
 		this.workspaceRepository = workspaceRepository;
 		this.userRepository = userRepository;
 		this.taskRepository = taskRepository;
-		this.weeklyReportRepository = weeklyReportRepository;
-		this.teamWeeklyReportRepository = teamWeeklyReportRepository;
 		this.recurringTaskTemplateRepository = recurringTaskTemplateRepository;
 	}
 
@@ -117,10 +110,10 @@ public class ProjectService {
 
 	/**
 	 * 프로젝트 관리(관리자, P2): DELETE /api/admin/projects/{id}.
-	 * Task/WeeklyReport/TeamWeeklyReport/RecurringTaskTemplate은
-	 * 모두 projects.id를 참조하는 FK이며 ON DELETE 정책이 미지정(RESTRICT)이다. 실제 삭제를 시도해
-	 * DataIntegrityViolationException을 catch-all(500)로 흘려보내는 대신, 삭제 전에 연관 데이터
-	 * 존재 여부를 선제적으로 검증해 409 CONFLICT로 명확히 응답한다.
+	 * Task/RecurringTaskTemplate은 projects.id를 참조하는 FK이며 ON DELETE 정책이 미지정(RESTRICT)이다.
+	 * 실제 삭제를 시도해 DataIntegrityViolationException을 catch-all(500)로 흘려보내는 대신, 삭제 전에
+	 * 연관 데이터 존재 여부를 선제적으로 검증해 409 CONFLICT로 명확히 응답한다. WeeklyReport(V23 재설계)는
+	 * 더 이상 project_id를 참조하지 않으므로(사람+주차 단위) 이 체크 대상에서 제외한다.
 	 */
 	@Transactional
 	public void deleteProject(AuthenticatedUser principal, Long projectId) {
@@ -134,8 +127,6 @@ public class ProjectService {
 
 	private boolean hasDependencies(Long projectId) {
 		return taskRepository.existsByProject_Id(projectId)
-				|| weeklyReportRepository.existsByProject_Id(projectId)
-				|| teamWeeklyReportRepository.existsByProject_Id(projectId)
 				|| recurringTaskTemplateRepository.existsByProject_Id(projectId);
 	}
 }

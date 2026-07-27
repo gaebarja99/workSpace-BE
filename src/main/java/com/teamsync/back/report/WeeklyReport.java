@@ -1,8 +1,8 @@
 package com.teamsync.back.report;
 
 import com.teamsync.back.common.BaseTimeEntity;
-import com.teamsync.back.project.Project;
 import com.teamsync.back.user.User;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,39 +13,37 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * FR-401~404(개인 주간 보고서). project+user+weekStart 단위로 하나만 존재한다(V10 유니크 제약).
- * 완료/진행/하이라이트/이슈 섹션은 이 엔티티에 저장하지 않고 project+weekStart~weekEnd 범위로 항상
- * 실시간 쿼리로 계산한다(WeeklyReportService 참고). 이유: JSON 컬럼 도입 없이도 주차 범위가 고정이라
- * 실무상 충분히 안정적이고, FR-004 때처럼 불필요한 복잡도를 피하는 이 코드베이스의 기존 원칙과 맞기 때문.
- * 한계(문서화): 제출(SUBMITTED) 이후 원본 태스크 상태가 다시 바뀌면 과거 보고서의 자동 섹션 내용도 그에 따라
- * 바뀔 수 있다(스냅샷이 아니므로) — MVP 허용 범위로 남겨둔다.
- * updatedAt(BaseTimeEntity)이 곧 "마지막 자동 저장" 시각이다(PATCH /reports/me 호출 시마다 갱신).
+ * FR-401~404(개인 주간 보고서, V23 재설계). project 종속을 제거하고 user_id + week_start 단위로
+ * 한 사람당 한 주에 하나만 존재한다(V23 유니크 제약) — 한 사람이 한 주에 여러 프로젝트(대분류) 업무를
+ * 섞어 적을 수 있어야 하기 때문이다. 완료/진행/이슈를 Task에서 자동 계산하던 방식은 완전히 폐기하고,
+ * 사용자가 {@link WeeklyReportEntry}(대/중/소분류 + 상세업무 + 달성율) 행을 직접 추가하는 방식으로
+ * 대체한다(WeeklyReportService 참고).
  */
 @Getter
 @Entity
 @Table(name = "weekly_reports",
 		uniqueConstraints = @UniqueConstraint(
-				name = "uk_weekly_reports_project_user_week",
-				columnNames = {"project_id", "user_id", "week_start"}))
+				name = "uk_weekly_reports_user_week",
+				columnNames = {"user_id", "week_start"}))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class WeeklyReport extends BaseTimeEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
-
-	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "project_id", nullable = false)
-	private Project project;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "user_id", nullable = false)
@@ -61,23 +59,18 @@ public class WeeklyReport extends BaseTimeEntity {
 	@Column(nullable = false, length = 20)
 	private WeeklyReportStatus status;
 
-	@Column(name = "next_week_plan", nullable = false, columnDefinition = "TEXT")
-	private String nextWeekPlan;
-
 	@Column(name = "submitted_at")
 	private LocalDateTime submittedAt;
 
-	public WeeklyReport(Project project, User user, LocalDate weekStart, LocalDate weekEnd) {
-		this.project = project;
+	@OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+	@OrderBy("section ASC, orderIndex ASC")
+	private List<WeeklyReportEntry> entries = new ArrayList<>();
+
+	public WeeklyReport(User user, LocalDate weekStart, LocalDate weekEnd) {
 		this.user = user;
 		this.weekStart = weekStart;
 		this.weekEnd = weekEnd;
 		this.status = WeeklyReportStatus.DRAFT;
-		this.nextWeekPlan = "";
-	}
-
-	public void changeNextWeekPlan(String nextWeekPlan) {
-		this.nextWeekPlan = nextWeekPlan != null ? nextWeekPlan : "";
 	}
 
 	/**

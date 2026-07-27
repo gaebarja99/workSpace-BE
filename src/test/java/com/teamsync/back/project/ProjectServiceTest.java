@@ -7,8 +7,6 @@ import static org.mockito.Mockito.when;
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.common.exception.ProjectHasDependenciesException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
-import com.teamsync.back.report.TeamWeeklyReportRepository;
-import com.teamsync.back.report.WeeklyReportRepository;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
 import com.teamsync.back.user.Role;
@@ -43,12 +41,6 @@ class ProjectServiceTest {
 	private TaskRepository taskRepository;
 
 	@Mock
-	private WeeklyReportRepository weeklyReportRepository;
-
-	@Mock
-	private TeamWeeklyReportRepository teamWeeklyReportRepository;
-
-	@Mock
 	private RecurringTaskTemplateRepository recurringTaskTemplateRepository;
 
 	private ProjectService projectService;
@@ -58,7 +50,7 @@ class ProjectServiceTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		projectService = new ProjectService(projectRepository, workspaceRepository, userRepository, taskRepository,
-				weeklyReportRepository, teamWeeklyReportRepository, recurringTaskTemplateRepository);
+				recurringTaskTemplateRepository);
 		workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
 		adminPrincipal = new AuthenticatedUser(1L, 10L, "admin@growtech.io", Role.ADMIN);

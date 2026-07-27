@@ -39,6 +39,8 @@ dependencies {
 	// FR-409 보고서 PDF 내보내기: HTML/CSS -> PDF 렌더링. LGPL 2.1+, Java 21 호환(순수 자바, PDFBox 기반).
 	implementation("com.openhtmltopdf:openhtmltopdf-pdfbox:1.0.10")
 	implementation("com.openhtmltopdf:openhtmltopdf-slf4j:1.0.10")
+	// 주간 보고(V23) xlsx 내보내기: 대/중/소분류 + 상세업무 + 달성율 표를 엑셀 시트로 재현(Apache 2.0).
+	implementation("org.apache.poi:poi-ooxml:5.2.5")
 
 	implementation("org.flywaydb:flyway-core")
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")

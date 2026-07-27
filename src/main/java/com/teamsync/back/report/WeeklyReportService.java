@@ -2,114 +2,112 @@ package com.teamsync.back.report;
 
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.common.exception.InvalidReportRequestException;
-import com.teamsync.back.common.exception.ProjectNotFoundException;
-import com.teamsync.back.common.exception.TeamWeeklyReportNotFoundException;
 import com.teamsync.back.common.exception.WeeklyReportAlreadySubmittedException;
 import com.teamsync.back.common.exception.WeeklyReportNotFoundException;
-import com.teamsync.back.project.Project;
-import com.teamsync.back.project.ProjectRepository;
-import com.teamsync.back.project.ProjectStatus;
-import com.teamsync.back.report.dto.CompletedTaskItem;
-import com.teamsync.back.report.dto.InProgressTaskItem;
-import com.teamsync.back.report.dto.IssueItem;
-import com.teamsync.back.report.dto.IssueKind;
+import com.teamsync.back.report.dto.EntriesReplaceRequest;
+import com.teamsync.back.report.dto.EntryResponse;
+import com.teamsync.back.report.dto.EntryUpsertRequest;
+import com.teamsync.back.report.dto.ExecutiveCategoryGroup;
+import com.teamsync.back.report.dto.ExecutiveDashboardResponse;
+import com.teamsync.back.report.dto.ExecutiveMemberEntries;
 import com.teamsync.back.report.dto.MemberSubmissionStatus;
-import com.teamsync.back.report.dto.NextWeekPlanUpdateRequest;
+import com.teamsync.back.report.dto.ReportEntries;
 import com.teamsync.back.report.dto.ReportHistoryItem;
-import com.teamsync.back.report.dto.ReportHistoryStatus;
-import com.teamsync.back.report.dto.RollupResponse;
-import com.teamsync.back.report.dto.RollupTeamItem;
-import com.teamsync.back.report.dto.RollupTrendItem;
-import com.teamsync.back.report.dto.TeamMemberReportSummary;
+import com.teamsync.back.report.dto.TeamDashboardResponse;
+import com.teamsync.back.report.dto.TeamMemberReportEntries;
 import com.teamsync.back.report.dto.TeamWeeklyReportExportView;
-import com.teamsync.back.report.dto.TeamWeeklyReportResponse;
 import com.teamsync.back.report.dto.WeeklyReportExportView;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
-import com.teamsync.back.task.Task;
-import com.teamsync.back.task.TaskRepository;
-import com.teamsync.back.task.TaskStatus;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-401~404/409/410(P2 주간 보고 자동화 + P3 내보내기). 계약 문서(p2-weekly-report-contract.md)
- * 기준 원칙: 완료/진행/이슈 섹션은 WeeklyReport/TeamWeeklyReport 어디에도 스냅샷하지 않고
- * 매 요청마다 project(+user)+weekStart~weekEnd 범위로 실시간 계산한다. 계약 문서에 명시된
- * "3주 이상 정체(STALE)" 플래그만 FR-401 이슈 섹션의 축소판으로 포함한다. FR-409(보고서 내보내기)는
- * 이 서비스가 이미 만들어 둔 toResponse/buildTeamResponse 계산 결과를 그대로 재사용하고(별도
- * 스냅샷/재계산 로직을 새로 만들지 않음), reportId로 직접 조회하는 getReportForExport/getTeamReportForExport
- * 두 메서드만 추가한다(ReportExportService가 호출). 팀 채팅(하이라이트)/알림(미제출 리마인드) 기능 제거에 따라
- * 하이라이트 섹션과 리마인드(수동/자동 배치) 기능은 더 이상 지원하지 않는다.
+ * 주간 보고(V23 재설계) 서비스. 기존 Task 자동 취합(computeAutoTaskSections)은 완전히 폐기하고,
+ * 사용자가 직접 입력한 {@link WeeklyReportEntry}(대/중/소분류 + 상세업무 + 달성율) 행을 그대로
+ * 조회/치환한다. WeeklyReport는 project에 종속되지 않고 user_id + week_start 단위로 하나만
+ * 존재한다(한 사람이 한 주에 여러 프로젝트 업무를 섞어 적을 수 있어야 하므로). 팀장/대표 뷰는
+ * "발행(publish)" 개념 없이 매 요청마다 실시간으로 집계한다.
  */
 @Service
 public class WeeklyReportService {
 
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-	private static final int STALE_DAYS_THRESHOLD = 21;
-	private static final int TOP_TITLES_LIMIT = 5;
 
 	private final WeeklyReportRepository weeklyReportRepository;
-	private final TeamWeeklyReportRepository teamWeeklyReportRepository;
-	private final ProjectRepository projectRepository;
+	private final WeeklyReportEntryRepository weeklyReportEntryRepository;
+	private final CategoryKeywordRepository categoryKeywordRepository;
 	private final UserRepository userRepository;
-	private final TaskRepository taskRepository;
 
 	public WeeklyReportService(WeeklyReportRepository weeklyReportRepository,
-			TeamWeeklyReportRepository teamWeeklyReportRepository, ProjectRepository projectRepository,
-			UserRepository userRepository, TaskRepository taskRepository) {
+			WeeklyReportEntryRepository weeklyReportEntryRepository,
+			CategoryKeywordRepository categoryKeywordRepository, UserRepository userRepository) {
 		this.weeklyReportRepository = weeklyReportRepository;
-		this.teamWeeklyReportRepository = teamWeeklyReportRepository;
-		this.projectRepository = projectRepository;
+		this.weeklyReportEntryRepository = weeklyReportEntryRepository;
+		this.categoryKeywordRepository = categoryKeywordRepository;
 		this.userRepository = userRepository;
-		this.taskRepository = taskRepository;
 	}
 
-	// ----- FR-401/403: 개인 보고서 -----
+	// ----- 개인 보고서 -----
 
 	@Transactional
-	public WeeklyReportResponse getOrCreateMyReport(AuthenticatedUser principal, Long projectId, LocalDate weekStartParam) {
-		Project project = getProjectInWorkspace(principal, projectId);
+	public WeeklyReportResponse getOrCreateMyReport(AuthenticatedUser principal, LocalDate weekStartParam) {
 		LocalDate weekStart = resolveWeekStart(weekStartParam);
 		User user = userRepository.getReferenceById(principal.userId());
-		WeeklyReport report = getOrCreateEntity(project, user, weekStart);
+		WeeklyReport report = getOrCreateEntity(user, weekStart);
 		return toResponse(report);
 	}
 
+	/**
+	 * 해당 section(THIS_WEEK/NEXT_WEEK)의 기존 행을 통째로 지우고 요청 리스트로 재생성한다(행 추가/삭제/
+	 * 순서변경을 프론트가 한 번에 PUT). orderIndex는 요청 리스트 순서를 그대로 반영한다. SUBMITTED
+	 * 상태에서는 "확정 이후 원본 불변" 원칙에 따라 거부한다.
+	 */
 	@Transactional
-	public WeeklyReportResponse updateNextWeekPlan(AuthenticatedUser principal, Long projectId,
-			LocalDate weekStartParam, NextWeekPlanUpdateRequest request) {
-		Project project = getProjectInWorkspace(principal, projectId);
+	public WeeklyReportResponse replaceEntries(AuthenticatedUser principal, LocalDate weekStartParam,
+			EntrySection section, EntriesReplaceRequest request) {
 		LocalDate weekStart = resolveWeekStart(weekStartParam);
 		User user = userRepository.getReferenceById(principal.userId());
-		WeeklyReport report = getOrCreateEntity(project, user, weekStart);
+		WeeklyReport report = getOrCreateEntity(user, weekStart);
 		if (report.getStatus() == WeeklyReportStatus.SUBMITTED) {
 			throw new WeeklyReportAlreadySubmittedException();
 		}
-		report.changeNextWeekPlan(request.nextWeekPlan());
+
+		List<WeeklyReportEntry> newEntries = new ArrayList<>();
+		int orderIndex = 0;
+		for (EntryUpsertRequest entryRequest : request.entries()) {
+			CategoryKeyword major = getActiveCategory(entryRequest.majorCategoryId(), CategoryType.MAJOR);
+			CategoryKeyword middle = getActiveCategory(entryRequest.middleCategoryId(), CategoryType.MIDDLE);
+			newEntries.add(new WeeklyReportEntry(report, section, major, middle, entryRequest.minorCategory(),
+					entryRequest.detail(), entryRequest.ratePercent(), orderIndex++));
+		}
+
+		weeklyReportEntryRepository.deleteAllByReport_IdAndSection(report.getId(), section);
+		weeklyReportEntryRepository.saveAll(newEntries);
+
 		return toResponse(report);
 	}
 
 	@Transactional
-	public WeeklyReportResponse submitMyReport(AuthenticatedUser principal, Long projectId, LocalDate weekStartParam) {
-		Project project = getProjectInWorkspace(principal, projectId);
+	public WeeklyReportResponse submitMyReport(AuthenticatedUser principal, LocalDate weekStartParam) {
 		LocalDate weekStart = resolveWeekStart(weekStartParam);
 		User user = userRepository.getReferenceById(principal.userId());
-		WeeklyReport report = getOrCreateEntity(project, user, weekStart);
+		WeeklyReport report = getOrCreateEntity(user, weekStart);
 		if (report.getStatus() == WeeklyReportStatus.SUBMITTED) {
 			throw new WeeklyReportAlreadySubmittedException();
 		}
@@ -117,42 +115,114 @@ public class WeeklyReportService {
 		return toResponse(report);
 	}
 
-	// ----- FR-404: 팀 보고서 -----
-
-	@Transactional
-	public TeamWeeklyReportResponse getTeamReport(AuthenticatedUser principal, Long projectId, LocalDate weekStartParam) {
-		Project project = getProjectInWorkspace(principal, projectId);
-		LocalDate weekStart = resolveWeekStart(weekStartParam);
-		return buildTeamResponse(project, weekStart);
-	}
-
-	@Transactional
-	public TeamWeeklyReportResponse publishTeamReport(AuthenticatedUser principal, Long projectId,
-			LocalDate weekStartParam) {
-		Project project = getProjectInWorkspace(principal, projectId);
-		LocalDate weekStart = resolveWeekStart(weekStartParam);
-		LocalDate weekEnd = weekEndOf(weekStart);
-		User publishedBy = userRepository.getReferenceById(principal.userId());
-
-		teamWeeklyReportRepository.findByProject_IdAndWeekStart(projectId, weekStart)
-				.ifPresentOrElse(
-						existing -> existing.republish(publishedBy),
-						() -> teamWeeklyReportRepository
-								.save(new TeamWeeklyReport(project, weekStart, weekEnd, publishedBy)));
-
-		return buildTeamResponse(project, weekStart);
-	}
-
-	// ----- FR-410: 보고 이력 -----
+	// ----- 팀장 뷰 -----
 
 	@Transactional(readOnly = true)
-	public List<ReportHistoryItem> getHistory(AuthenticatedUser principal, Long projectId, LocalDate weekStartParam,
-			String q) {
-		Project project = getProjectInWorkspace(principal, projectId);
+	public TeamDashboardResponse getTeamDashboard(AuthenticatedUser principal, LocalDate weekStartParam) {
+		LocalDate weekStart = resolveWeekStart(weekStartParam);
+		LocalDate weekEnd = weekEndOf(weekStart);
+		List<User> members = reportMembers(principal.workspaceId());
+		List<Long> userIds = members.stream().map(User::getId).toList();
+
+		List<WeeklyReport> reports = weeklyReportRepository.findAllByUser_IdInAndWeekStart(userIds, weekStart);
+		Map<Long, WeeklyReport> reportByUserId = reports.stream()
+				.collect(Collectors.toMap(r -> r.getUser().getId(), r -> r));
+		Map<Long, List<WeeklyReportEntry>> entriesByReportId = loadEntriesByReportId(reports);
+
+		int submittedCount = 0;
+		List<TeamMemberReportEntries> memberList = new ArrayList<>();
+		for (User member : members) {
+			WeeklyReport report = reportByUserId.get(member.getId());
+			boolean submitted = report != null && report.getStatus() == WeeklyReportStatus.SUBMITTED;
+			if (submitted) {
+				submittedCount++;
+			}
+			List<WeeklyReportEntry> memberEntries = report != null
+					? entriesByReportId.getOrDefault(report.getId(), List.of())
+					: List.of();
+			memberList.add(new TeamMemberReportEntries(member.getId(), member.getName(),
+					submitted ? MemberSubmissionStatus.SUBMITTED : MemberSubmissionStatus.NOT_SUBMITTED,
+					report != null ? report.getSubmittedAt() : null,
+					filterSection(memberEntries, EntrySection.THIS_WEEK),
+					filterSection(memberEntries, EntrySection.NEXT_WEEK)));
+		}
+
+		return new TeamDashboardResponse(weekStart, weekEnd, submittedCount, members.size(), memberList);
+	}
+
+	// ----- 대표 뷰 -----
+
+	/**
+	 * 전 인원의 entries를 majorCategory(대분류=프로젝트) 기준으로 그룹핑한다. 해당 대분류에 entry가
+	 * 있는 멤버만 포함하고(entry 없는 조합은 생략), 그룹 안 각 멤버의 thisWeekEntries/nextWeekEntries는
+	 * 그 대분류에 속한 항목만 필터링된 목록이다(멤버 전체 항목이 아님).
+	 */
+	@Transactional(readOnly = true)
+	public ExecutiveDashboardResponse getExecutiveDashboard(AuthenticatedUser principal, LocalDate weekStartParam) {
+		LocalDate weekStart = resolveWeekStart(weekStartParam);
+		LocalDate weekEnd = weekEndOf(weekStart);
+		List<User> members = reportMembers(principal.workspaceId());
+		List<Long> userIds = members.stream().map(User::getId).toList();
+
+		List<WeeklyReport> reports = weeklyReportRepository.findAllByUser_IdInAndWeekStart(userIds, weekStart);
+		Map<Long, Long> reportIdToUserId = reports.stream()
+				.collect(Collectors.toMap(WeeklyReport::getId, r -> r.getUser().getId()));
+		List<WeeklyReportEntry> entries = loadEntries(reports);
+
+		Map<Long, CategoryKeyword> categoryById = new LinkedHashMap<>();
+		Map<Long, Map<Long, List<EntryResponse>>> thisWeekByCategoryThenUser = new LinkedHashMap<>();
+		Map<Long, Map<Long, List<EntryResponse>>> nextWeekByCategoryThenUser = new LinkedHashMap<>();
+
+		for (WeeklyReportEntry entry : entries) {
+			Long userId = reportIdToUserId.get(entry.getReport().getId());
+			if (userId == null) {
+				continue;
+			}
+			CategoryKeyword major = entry.getMajorCategory();
+			categoryById.putIfAbsent(major.getId(), major);
+			Map<Long, Map<Long, List<EntryResponse>>> target = entry.getSection() == EntrySection.THIS_WEEK
+					? thisWeekByCategoryThenUser
+					: nextWeekByCategoryThenUser;
+			target.computeIfAbsent(major.getId(), key -> new LinkedHashMap<>())
+					.computeIfAbsent(userId, key -> new ArrayList<>())
+					.add(EntryResponse.from(entry));
+		}
+
+		List<ExecutiveCategoryGroup> categories = categoryById.values().stream()
+				.sorted(Comparator.comparingInt(CategoryKeyword::getOrderIndex).thenComparing(CategoryKeyword::getName))
+				.map(major -> buildCategoryGroup(major, members, thisWeekByCategoryThenUser, nextWeekByCategoryThenUser))
+				.toList();
+
+		return new ExecutiveDashboardResponse(weekStart, weekEnd, categories);
+	}
+
+	private ExecutiveCategoryGroup buildCategoryGroup(CategoryKeyword major, List<User> members,
+			Map<Long, Map<Long, List<EntryResponse>>> thisWeekByCategoryThenUser,
+			Map<Long, Map<Long, List<EntryResponse>>> nextWeekByCategoryThenUser) {
+		Map<Long, List<EntryResponse>> thisWeekByUser = thisWeekByCategoryThenUser.getOrDefault(major.getId(), Map.of());
+		Map<Long, List<EntryResponse>> nextWeekByUser = nextWeekByCategoryThenUser.getOrDefault(major.getId(), Map.of());
+		Set<Long> memberIdsInCategory = new LinkedHashSet<>();
+		memberIdsInCategory.addAll(thisWeekByUser.keySet());
+		memberIdsInCategory.addAll(nextWeekByUser.keySet());
+
+		List<ExecutiveMemberEntries> memberEntries = members.stream()
+				.filter(member -> memberIdsInCategory.contains(member.getId()))
+				.map(member -> new ExecutiveMemberEntries(member.getId(), member.getName(),
+						thisWeekByUser.getOrDefault(member.getId(), List.of()),
+						nextWeekByUser.getOrDefault(member.getId(), List.of())))
+				.toList();
+
+		return new ExecutiveCategoryGroup(major.getId(), major.getName(), memberEntries);
+	}
+
+	// ----- 보고 이력 -----
+
+	@Transactional(readOnly = true)
+	public List<ReportHistoryItem> getHistory(AuthenticatedUser principal, LocalDate weekStartParam, String q) {
+		Long workspaceId = principal.workspaceId();
 
 		Set<LocalDate> allWeeks = new TreeSet<>(Comparator.reverseOrder());
-		allWeeks.addAll(weeklyReportRepository.findDistinctWeekStartsByProjectId(projectId));
-		allWeeks.addAll(teamWeeklyReportRepository.findDistinctWeekStartsByProjectId(projectId));
+		allWeeks.addAll(weeklyReportRepository.findDistinctWeekStartsByWorkspaceId(workspaceId));
 
 		List<LocalDate> candidateWeeks;
 		if (weekStartParam != null) {
@@ -163,41 +233,34 @@ public class WeeklyReportService {
 		}
 
 		String keyword = (q != null && !q.isBlank()) ? escapeLikeWildcards(q.trim()) : null;
-		int totalMemberCount = reportMembers(principal.workspaceId()).size();
+		List<User> members = reportMembers(workspaceId);
+		List<Long> userIds = members.stream().map(User::getId).toList();
+		int totalMemberCount = members.size();
 
 		List<ReportHistoryItem> result = new ArrayList<>();
 		for (LocalDate weekStart : candidateWeeks) {
 			LocalDate weekEnd = weekEndOf(weekStart);
-			if (keyword != null && !matchesKeyword(projectId, weekStart, keyword)) {
+			if (keyword != null && !weeklyReportEntryRepository.existsKeywordMatch(workspaceId, weekStart, keyword)) {
 				continue;
 			}
-
 			long submittedCount = weeklyReportRepository
-					.countByProject_IdAndWeekStartAndStatus(projectId, weekStart, WeeklyReportStatus.SUBMITTED);
-			boolean published = teamWeeklyReportRepository.findByProject_IdAndWeekStart(projectId, weekStart).isPresent();
-			int issueCount = countTeamIssues(project, weekStart, weekEnd);
+					.countByUser_IdInAndWeekStartAndStatus(userIds, weekStart, WeeklyReportStatus.SUBMITTED);
 			double completionRate = totalMemberCount == 0 ? 0.0 : (double) submittedCount / totalMemberCount;
-
-			result.add(new ReportHistoryItem(
-					weekStart, weekEnd,
-					published ? ReportHistoryStatus.PUBLISHED : ReportHistoryStatus.AGGREGATING,
-					(int) submittedCount, totalMemberCount, completionRate, issueCount));
+			result.add(new ReportHistoryItem(weekStart, weekEnd, (int) submittedCount, totalMemberCount, completionRate));
 		}
 		return result;
 	}
 
-	// ----- FR-409: 보고서 내보내기(PDF/이메일) -----
+	// ----- FR-409: 보고서 내보내기(PDF/이메일/xlsx) -----
 
 	/**
-	 * reportId로 개인 주간 보고서를 직접 조회한다. GET /reports/me와 달리 "본인 소유가 아닌 보고서"도
-	 * 조회 대상이 될 수 있어(계약: "본인 또는 같은 워크스페이스 LEADER/ADMIN만 허용") project+weekStart
-	 * 기반 조회 대신 PK로 직접 찾는다. 워크스페이스 불일치·권한 부족 모두 동일하게 404로 응답해
-	 * 리소스 존재 여부를 숨긴다(ReportTemplateNotFoundException 등과 동일 원칙, PRD 5.6).
+	 * reportId로 개인 주간 보고서를 직접 조회한다. "본인 또는 같은 워크스페이스 LEADER/ADMIN만 허용"
+	 * (그 외엔 403이 아닌 404로 응답해 리소스 존재 여부를 숨긴다, PRD 5.6).
 	 */
 	@Transactional(readOnly = true)
 	public WeeklyReportExportView getReportForExport(AuthenticatedUser principal, Long reportId) {
 		WeeklyReport report = weeklyReportRepository.findById(reportId)
-				.filter(r -> r.getProject().getWorkspace().getId().equals(principal.workspaceId()))
+				.filter(r -> r.getUser().getWorkspace().getId().equals(principal.workspaceId()))
 				.orElseThrow(WeeklyReportNotFoundException::new);
 
 		boolean isOwner = report.getUser().getId().equals(principal.userId());
@@ -206,294 +269,67 @@ public class WeeklyReportService {
 			throw new WeeklyReportNotFoundException();
 		}
 
-		return new WeeklyReportExportView(toResponse(report), report.getProject().getName(),
-				report.getUser().getName(), report.getUser().getEmail());
+		return new WeeklyReportExportView(toResponse(report), report.getUser().getName(), report.getUser().getEmail());
 	}
 
-	/**
-	 * teamReportId(TeamWeeklyReport PK)로 팀 주간 보고를 직접 조회한다. LEADER/ADMIN 제한은
-	 * 컨트롤러의 @PreAuthorize가 이미 담당하므로(GET /reports/team과 동일 패턴) 여기서는
-	 * 워크스페이스 스코핑만 검증한다. 집계 내용은 buildTeamResponse로 그대로 재계산해 재사용한다.
-	 */
+	/** 팀 보고서는 발행 레코드가 없으므로 teamReportId 대신 weekStart로 식별한다(LEADER/ADMIN, 컨트롤러에서 제한). */
 	@Transactional(readOnly = true)
-	public TeamWeeklyReportExportView getTeamReportForExport(AuthenticatedUser principal, Long teamReportId) {
-		TeamWeeklyReport teamReport = teamWeeklyReportRepository.findById(teamReportId)
-				.filter(t -> t.getProject().getWorkspace().getId().equals(principal.workspaceId()))
-				.orElseThrow(TeamWeeklyReportNotFoundException::new);
-
-		Project project = teamReport.getProject();
-		return new TeamWeeklyReportExportView(buildTeamResponse(project, teamReport.getWeekStart()), project.getName());
-	}
-
-	// ----- FR-407: 조직 롤업 대시보드 -----
-
-	/**
-	 * GET /api/reports/rollup(계약 문서 fr407-contract.md). "팀"=Project(ACTIVE만), "조직"=요청자의
-	 * 워크스페이스로 축소(멀티워크스페이스 임원 개념 없음). 완료율/지연율은 buildTeamResponse/countTeamIssues와
-	 * 동일한 분모 원칙("완료+진행+이슈" 태스크 수)을 프로젝트(=팀) 단위로, computeAutoTaskSections의
-	 * OVERDUE/STALE 판정 공식을 담당자 구분 없이 프로젝트 전체로 확장해 계산한다(새 계산식을 발명하지 않음).
-	 */
-	@Transactional(readOnly = true)
-	public RollupResponse getOrgRollup(AuthenticatedUser principal, LocalDate weekStartParam) {
-		LocalDate weekStart = resolveRollupWeekStart(weekStartParam);
-		LocalDate weekEnd = weekEndOf(weekStart);
-		Long workspaceId = principal.workspaceId();
-
-		List<Project> activeProjects = projectRepository
-				.findAllByWorkspaceIdAndStatusOrderByIdAsc(workspaceId, ProjectStatus.ACTIVE);
-		int memberCount = reportMembers(workspaceId).size();
-
-		List<RollupTeamItem> teams = new ArrayList<>();
-		int orgCompleted = 0;
-		int orgDenominator = 0;
-		for (Project project : activeProjects) {
-			ProjectTaskCounts counts = computeProjectTaskCounts(project.getId(), weekStart, weekEnd);
-			int submittedCount = (int) weeklyReportRepository
-					.countByProject_IdAndWeekStartAndStatus(project.getId(), weekStart, WeeklyReportStatus.SUBMITTED);
-			int denominator = counts.denominator();
-			teams.add(new RollupTeamItem(project.getId(), project.getName(), memberCount, submittedCount,
-					percentOf(counts.completed(), denominator), percentOf(counts.overdueOnly(), denominator)));
-			orgCompleted += counts.completed();
-			orgDenominator += denominator;
-		}
-		int orgCompletionRate = percentOf(orgCompleted, orgDenominator);
-
-		List<RollupTrendItem> trend = new ArrayList<>();
-		for (int weeksAgo = 3; weeksAgo >= 1; weeksAgo--) {
-			LocalDate trendWeekStart = weekStart.minusWeeks(weeksAgo);
-			trend.add(computeOrgTrendItem(activeProjects, trendWeekStart));
-		}
-		trend.add(new RollupTrendItem(weekStart, weekEnd, orgCompletionRate));
-
-		return new RollupResponse(weekStart, weekEnd, memberCount, teams, orgCompletionRate, trend);
-	}
-
-	private RollupTrendItem computeOrgTrendItem(List<Project> activeProjects, LocalDate trendWeekStart) {
-		LocalDate trendWeekEnd = weekEndOf(trendWeekStart);
-		int completed = 0;
-		int denominator = 0;
-		for (Project project : activeProjects) {
-			ProjectTaskCounts counts = computeProjectTaskCounts(project.getId(), trendWeekStart, trendWeekEnd);
-			completed += counts.completed();
-			denominator += counts.denominator();
-		}
-		return new RollupTrendItem(trendWeekStart, trendWeekEnd, percentOf(completed, denominator));
-	}
-
-	/**
-	 * FR-407 전용: computeAutoTaskSections와 동일한 OVERDUE/STALE 판정 공식(FR-401 계약 문서 그대로)을
-	 * 담당자(assignees) 필터 없이 프로젝트 전체 단위로 확장한다. issuesTotal은 한 태스크가 OVERDUE·STALE을
-	 * 동시에 만족하면 두 번 집계될 수 있다(computeAutoTaskSections의 이슈 목록과 동일한 특성을 그대로 유지).
-	 */
-	private ProjectTaskCounts computeProjectTaskCounts(Long projectId, LocalDate weekStart, LocalDate weekEnd) {
-		LocalDateTime rangeStart = weekStart.atStartOfDay();
-		LocalDateTime rangeEndExclusive = weekEnd.plusDays(1).atStartOfDay();
-
-		int completed = taskRepository
-				.findAllByProject_IdAndStatusAndUpdatedAtBetween(projectId, TaskStatus.DONE, rangeStart, rangeEndExclusive)
-				.size();
-
-		List<Task> openTasks = taskRepository.findAllByProject_IdAndStatusNot(projectId, TaskStatus.DONE);
-		int inProgress = openTasks.size();
-
-		LocalDate today = LocalDate.now(KST);
-		LocalDate overdueCutoff = today.isBefore(weekEnd.plusDays(1)) ? today : weekEnd.plusDays(1);
-		LocalDateTime staleThreshold = LocalDateTime.now(KST).minusDays(STALE_DAYS_THRESHOLD);
-
-		int overdueOnly = 0;
-		int issuesTotal = 0;
-		for (Task t : openTasks) {
-			if (t.getDueDate() != null && t.getDueDate().isBefore(overdueCutoff)) {
-				overdueOnly++;
-				issuesTotal++;
-			}
-			if (t.getUpdatedAt().isBefore(staleThreshold)) {
-				issuesTotal++;
-			}
-		}
-		return new ProjectTaskCounts(completed, inProgress, issuesTotal, overdueOnly);
-	}
-
-	private static int percentOf(int numerator, int denominator) {
-		if (denominator == 0) {
-			return 0;
-		}
-		return (int) Math.round((numerator * 100.0) / denominator);
-	}
-
-	/**
-	 * 계약 문서 명시: weekStart 생략 시 이번 주(KST) 월요일을 기본값으로 쓰되, 값이 있는데 월요일이 아니면
-	 * (resolveWeekStart처럼 조용히 정규화하지 않고) 400으로 거부한다. "임원 대시보드"는 필터 UI에서 항상
-	 * 주 단위 옵션만 노출하므로, 월요일이 아닌 값이 들어오면 클라이언트 버그로 간주해 명시적으로 알린다.
-	 */
-	private LocalDate resolveRollupWeekStart(LocalDate weekStartParam) {
-		if (weekStartParam == null) {
-			return currentWeekStart();
-		}
-		if (weekStartParam.getDayOfWeek() != DayOfWeek.MONDAY) {
-			throw new InvalidReportRequestException("weekStart는 반드시 월요일(yyyy-MM-dd)이어야 합니다.");
-		}
-		return weekStartParam;
-	}
-
-	private record ProjectTaskCounts(int completed, int inProgress, int issuesTotal, int overdueOnly) {
-		int denominator() {
-			return completed + inProgress + issuesTotal;
-		}
+	public TeamWeeklyReportExportView getTeamReportForExport(AuthenticatedUser principal, LocalDate weekStart) {
+		return new TeamWeeklyReportExportView(getTeamDashboard(principal, weekStart));
 	}
 
 	// ----- 내부 구현 -----
 
-	private WeeklyReport getOrCreateEntity(Project project, User user, LocalDate weekStart) {
-		return weeklyReportRepository.findByProject_IdAndUser_IdAndWeekStart(project.getId(), user.getId(), weekStart)
-				.orElseGet(() -> weeklyReportRepository
-						.save(new WeeklyReport(project, user, weekStart, weekEndOf(weekStart))));
+	private WeeklyReport getOrCreateEntity(User user, LocalDate weekStart) {
+		return weeklyReportRepository.findByUser_IdAndWeekStart(user.getId(), weekStart)
+				.orElseGet(() -> weeklyReportRepository.save(new WeeklyReport(user, weekStart, weekEndOf(weekStart))));
+	}
+
+	private CategoryKeyword getActiveCategory(Long id, CategoryType expectedType) {
+		CategoryKeyword category = categoryKeywordRepository.findById(id)
+				.filter(CategoryKeyword::isActive)
+				.orElseThrow(() -> new InvalidReportRequestException("존재하지 않거나 비활성화된 카테고리입니다: " + id));
+		if (category.getType() != expectedType) {
+			throw new InvalidReportRequestException("카테고리 타입이 일치하지 않습니다(" + expectedType + " 기대, " + category.getType()
+					+ " 입력): " + id);
+		}
+		return category;
 	}
 
 	private WeeklyReportResponse toResponse(WeeklyReport report) {
-		Long projectId = report.getProject().getId();
-		LocalDate weekStart = report.getWeekStart();
-		LocalDate weekEnd = report.getWeekEnd();
-
-		AutoTaskSections sections = computeAutoTaskSections(projectId, report.getUser().getId(), weekStart, weekEnd);
-
-		return new WeeklyReportResponse(
-				report.getId(), projectId, weekStart, weekEnd, report.getStatus(), report.getNextWeekPlan(),
-				report.getSubmittedAt(), report.getUpdatedAt(),
-				sections.completed(), sections.inProgress(), sections.issues());
+		List<WeeklyReportEntry> entries = weeklyReportEntryRepository
+				.findAllByReport_IdOrderBySectionAscOrderIndexAsc(report.getId());
+		ReportEntries reportEntries = new ReportEntries(
+				filterSection(entries, EntrySection.THIS_WEEK), filterSection(entries, EntrySection.NEXT_WEEK));
+		return new WeeklyReportResponse(report.getId(), report.getWeekStart(), report.getWeekEnd(), report.getStatus(),
+				report.getSubmittedAt(), report.getUpdatedAt(), reportEntries);
 	}
 
-	private TeamWeeklyReportResponse buildTeamResponse(Project project, LocalDate weekStart) {
-		Long projectId = project.getId();
-		LocalDate weekEnd = weekEndOf(weekStart);
-		List<User> members = reportMembers(project.getWorkspace().getId());
+	private static List<EntryResponse> filterSection(List<WeeklyReportEntry> entries, EntrySection section) {
+		return entries.stream().filter(e -> e.getSection() == section).map(EntryResponse::from).toList();
+	}
 
-		int submittedCount = 0;
-		int teamCompletedCount = 0;
-		int teamIssueCount = 0;
-		List<TeamMemberReportSummary> memberSummaries = new ArrayList<>();
+	private Map<Long, List<WeeklyReportEntry>> loadEntriesByReportId(List<WeeklyReport> reports) {
+		List<WeeklyReportEntry> entries = loadEntries(reports);
+		return entries.stream().collect(
+				Collectors.groupingBy(e -> e.getReport().getId(), LinkedHashMap::new, Collectors.toList()));
+	}
 
-		for (User member : members) {
-			Optional<WeeklyReport> maybeReport = weeklyReportRepository
-					.findByProject_IdAndUser_IdAndWeekStart(projectId, member.getId(), weekStart);
-			AutoTaskSections sections = computeAutoTaskSections(projectId, member.getId(), weekStart, weekEnd);
-
-			boolean submitted = maybeReport.isPresent() && maybeReport.get().getStatus() == WeeklyReportStatus.SUBMITTED;
-			if (submitted) {
-				submittedCount++;
-			}
-			teamCompletedCount += sections.completed().size();
-			teamIssueCount += sections.issues().size();
-
-			memberSummaries.add(new TeamMemberReportSummary(
-					member.getId(), member.getName(),
-					submitted ? MemberSubmissionStatus.SUBMITTED : MemberSubmissionStatus.NOT_SUBMITTED,
-					maybeReport.map(WeeklyReport::getSubmittedAt).orElse(null),
-					sections.completed().size(), sections.inProgress().size(), sections.issues().size(),
-					topTitles(sections.completed().stream().map(CompletedTaskItem::title).toList()),
-					topTitles(sections.inProgress().stream().map(InProgressTaskItem::title).toList()),
-					topTitles(sections.issues().stream().map(WeeklyReportService::issueTitleWithKind).toList()),
-					maybeReport.map(WeeklyReport::getNextWeekPlan).orElse("")));
+	private List<WeeklyReportEntry> loadEntries(List<WeeklyReport> reports) {
+		if (reports.isEmpty()) {
+			return List.of();
 		}
-
-		Optional<TeamWeeklyReport> teamReport = teamWeeklyReportRepository.findByProject_IdAndWeekStart(projectId, weekStart);
-
-		return new TeamWeeklyReportResponse(
-				projectId, weekStart, weekEnd,
-				teamReport.map(TeamWeeklyReport::getPublishedAt).orElse(null),
-				teamReport.map(t -> t.getPublishedBy().getName()).orElse(null),
-				submittedCount, members.size(), teamCompletedCount, teamIssueCount, memberSummaries);
-	}
-
-	private int countTeamIssues(Project project, LocalDate weekStart, LocalDate weekEnd) {
-		List<User> members = reportMembers(project.getWorkspace().getId());
-		int total = 0;
-		for (User member : members) {
-			total += computeAutoTaskSections(project.getId(), member.getId(), weekStart, weekEnd).issues().size();
-		}
-		return total;
-	}
-
-	private boolean matchesKeyword(Long projectId, LocalDate weekStart, String keyword) {
-		return weeklyReportRepository.existsNextWeekPlanMatch(projectId, weekStart, keyword);
+		List<Long> reportIds = reports.stream().map(WeeklyReport::getId).toList();
+		return weeklyReportEntryRepository.findAllByReport_IdInOrderBySectionAscOrderIndexAsc(reportIds);
 	}
 
 	/**
-	 * FR-401 자동 취합 규칙(계약 문서 그대로):
-	 * - 완료한 일: status=DONE AND assignees 포함 AND updatedAt in [weekStart, weekEnd+1일).
-	 * - 진행 중인 일: status!=DONE AND assignees 포함. isNew=createdAt in [weekStart, weekEnd+1일).
-	 * - OVERDUE: status!=DONE AND dueDate < min(오늘, weekEnd+1일) — 지난 주 보고서는 그 주 기준으로 판정.
-	 * - STALE: status!=DONE AND updatedAt이 21일 이상 전(문면 그대로 "현재 시각" 기준. OVERDUE와 달리
-	 *   과거 주차 조회 시에도 weekEnd로 재기준하지 않는다 — 계약 문서가 STALE에는 "그 주 기준" 문구를
-	 *   두지 않은 것을 문면 그대로 해석함).
-	 */
-	private AutoTaskSections computeAutoTaskSections(Long projectId, Long userId, LocalDate weekStart, LocalDate weekEnd) {
-		LocalDateTime rangeStart = weekStart.atStartOfDay();
-		LocalDateTime rangeEndExclusive = weekEnd.plusDays(1).atStartOfDay();
-
-		List<Task> completedTasks = taskRepository.findAllByProject_IdAndAssignees_IdAndStatusAndUpdatedAtBetween(
-				projectId, userId, TaskStatus.DONE, rangeStart, rangeEndExclusive);
-		List<CompletedTaskItem> completed = completedTasks.stream()
-				.map(t -> new CompletedTaskItem(t.getId(), t.getTitle(), t.getDueDate(), t.getUpdatedAt()))
-				.toList();
-
-		List<Task> openTasks = taskRepository.findAllByProject_IdAndAssignees_IdAndStatusNot(
-				projectId, userId, TaskStatus.DONE);
-		List<InProgressTaskItem> inProgress = openTasks.stream()
-				.map(t -> new InProgressTaskItem(t.getId(), t.getTitle(), t.getStatus(), t.getPriority(),
-						t.getDueDate(), isInRange(t.getCreatedAt(), rangeStart, rangeEndExclusive)))
-				.toList();
-
-		LocalDate today = LocalDate.now(KST);
-		LocalDate overdueCutoff = today.isBefore(weekEnd.plusDays(1)) ? today : weekEnd.plusDays(1);
-		LocalDateTime staleThreshold = LocalDateTime.now(KST).minusDays(STALE_DAYS_THRESHOLD);
-
-		List<IssueItem> issues = new ArrayList<>();
-		for (Task t : openTasks) {
-			if (t.getDueDate() != null && t.getDueDate().isBefore(overdueCutoff)) {
-				long daysOverdue = ChronoUnit.DAYS.between(t.getDueDate(), overdueCutoff);
-				issues.add(new IssueItem(t.getId(), t.getTitle(), IssueKind.OVERDUE, t.getDueDate(), daysOverdue, null));
-			}
-			if (t.getUpdatedAt().isBefore(staleThreshold)) {
-				issues.add(new IssueItem(t.getId(), t.getTitle(), IssueKind.STALE, null, null,
-						t.getUpdatedAt().toLocalDate()));
-			}
-		}
-
-		return new AutoTaskSections(completed, inProgress, issues);
-	}
-
-	private static boolean isInRange(LocalDateTime value, LocalDateTime startInclusive, LocalDateTime endExclusive) {
-		return !value.isBefore(startInclusive) && value.isBefore(endExclusive);
-	}
-
-	private static List<String> topTitles(List<String> titles) {
-		return titles.stream().limit(TOP_TITLES_LIMIT).toList();
-	}
-
-	/**
-	 * 팀 보고서 요약의 이슈 제목에는 종류(마감초과/정체) 라벨을 접미사로 붙인다. 개인 보고서 화면은
-	 * IssueItem.kind로 배지를 구분 렌더링하지만, 팀 요약은 제목 문자열 배열만 내려주므로 한 태스크가
-	 * OVERDUE·STALE을 동시에 만족해 같은 제목이 두 번 들어갈 때 구분이 사라지는 문제가 있었다(QA 결함 1).
-	 */
-	private static String issueTitleWithKind(IssueItem issue) {
-		String label = issue.kind() == IssueKind.OVERDUE ? "마감초과" : "정체";
-		return issue.title() + " (" + label + ")";
-	}
-
-	/**
-	 * 클라이언트가 보낸 weekStart를 그대로 신뢰하지 않고 항상 그 주의 월요일로 정규화한다(방어적 정규화 —
-	 * 계약 문서는 "서버는 임의의 weekStart를 받으므로 클라이언트에서 월요일 기준으로 계산" 이라고만 명시하나,
-	 * 잘못 정렬된 날짜가 들어와도 project_id+user_id+week_start 유니크 제약과 주차 경계가 어긋나지 않도록
-	 * 서버에서도 한번 더 보정한다). 값이 없으면 Asia/Seoul 기준 이번 주 월요일을 기본값으로 쓴다.
+	 * 클라이언트가 보낸 weekStart를 그대로 신뢰하지 않고 항상 그 주의 월요일로 정규화한다(방어적
+	 * 정규화). 값이 없으면 Asia/Seoul 기준 이번 주 월요일을 기본값으로 쓴다.
 	 */
 	private LocalDate resolveWeekStart(LocalDate weekStartParam) {
 		LocalDate base = weekStartParam != null ? weekStartParam : LocalDate.now(KST);
 		return base.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-	}
-
-	private LocalDate currentWeekStart() {
-		return LocalDate.now(KST).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 	}
 
 	private static LocalDate weekEndOf(LocalDate weekStart) {
@@ -505,27 +341,14 @@ public class WeeklyReportService {
 		return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
 	}
 
-	private Project getProjectInWorkspace(AuthenticatedUser principal, Long projectId) {
-		return projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
-				.orElseThrow(ProjectNotFoundException::new);
-	}
-
 	/**
 	 * 주간 보고 대상 "멤버"는 GUEST를 제외한 워크스페이스 사용자다. GUEST는 개인 보고서 엔드포인트
-	 * (GET /reports/me 등)가 구조적으로 403이라 애초에 보고서를 제출할 수 없으므로, 제출률 분모나
-	 * 미제출 리마인드 대상에 포함하면 (1) 제출률이 영원히 100%에 못 미치고 (2) GUEST에게 의미 없는
-	 * 리마인드 알림이 매주 발송되는 문제가 생긴다. 계약 문서는 "프로젝트 멤버 전원"을 문자 그대로
-	 * 재사용하라고 했으나, 그 전제(멤버=제출 가능자)가 GUEST에는 성립하지 않아 여기서만 GUEST를 뺀다.
+	 * (GET /reports/me 등)가 구조적으로 403이라 애초에 보고서를 제출할 수 없으므로, 제출률 분모에
+	 * 포함하면 제출률이 영원히 100%에 못 미치는 문제가 생긴다.
 	 */
 	private List<User> reportMembers(Long workspaceId) {
 		return userRepository.findAllByWorkspaceIdOrderByNameAsc(workspaceId).stream()
 				.filter(u -> u.getRole() != Role.GUEST)
 				.toList();
-	}
-
-	private record AutoTaskSections(
-			List<CompletedTaskItem> completed,
-			List<InProgressTaskItem> inProgress,
-			List<IssueItem> issues) {
 	}
 }

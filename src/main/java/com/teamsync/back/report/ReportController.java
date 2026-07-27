@@ -1,9 +1,10 @@
 package com.teamsync.back.report;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.report.dto.NextWeekPlanUpdateRequest;
+import com.teamsync.back.report.dto.EntriesReplaceRequest;
+import com.teamsync.back.report.dto.ExecutiveDashboardResponse;
 import com.teamsync.back.report.dto.ReportHistoryItem;
-import com.teamsync.back.report.dto.TeamWeeklyReportResponse;
+import com.teamsync.back.report.dto.TeamDashboardResponse;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -12,21 +13,20 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * FR-401~404/410(P2 주간 보고 자동화) API. 모든 엔드포인트는 /api/projects/{projectId}/reports
- * 하위에 있으며, 개인 보고서(/me*)는 GUEST를 제외한 ADMIN/LEADER/MEMBER, 팀 보고서(/team*)는
- * ADMIN/LEADER만 호출 가능하다(계약 문서 기준).
+ * 주간 보고(V23 재설계) API. project 비종속(/api/reports/... — 더 이상 /api/projects/{projectId}/reports
+ * 하위가 아님). 개인 보고서(/me*)는 GUEST를 제외한 ADMIN/LEADER/MEMBER, 팀장 뷰(/team)는 ADMIN/LEADER,
+ * 대표 뷰(/executive)는 ADMIN만 호출 가능하다.
  */
 @RestController
-@RequestMapping("/api/projects/{projectId}/reports")
+@RequestMapping("/api/reports")
 public class ReportController {
 
 	private final WeeklyReportService weeklyReportService;
@@ -38,45 +38,43 @@ public class ReportController {
 	@GetMapping("/me")
 	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
 	public ResponseEntity<WeeklyReportResponse> getMyReport(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long projectId, @RequestParam(required = false) LocalDate weekStart) {
-		return ResponseEntity.ok(weeklyReportService.getOrCreateMyReport(principal, projectId, weekStart));
+			@RequestParam(required = false) LocalDate weekStart) {
+		return ResponseEntity.ok(weeklyReportService.getOrCreateMyReport(principal, weekStart));
 	}
 
-	@PatchMapping("/me")
+	@PutMapping("/me/entries")
 	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
-	public ResponseEntity<WeeklyReportResponse> updateMyReport(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long projectId, @RequestParam(required = false) LocalDate weekStart,
-			@Valid @RequestBody NextWeekPlanUpdateRequest request) {
-		return ResponseEntity.ok(weeklyReportService.updateNextWeekPlan(principal, projectId, weekStart, request));
+	public ResponseEntity<WeeklyReportResponse> replaceMyEntries(@AuthenticationPrincipal AuthenticatedUser principal,
+			@RequestParam(required = false) LocalDate weekStart, @RequestParam EntrySection section,
+			@Valid @RequestBody EntriesReplaceRequest request) {
+		return ResponseEntity.ok(weeklyReportService.replaceEntries(principal, weekStart, section, request));
 	}
 
 	@PostMapping("/me/submit")
 	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
 	public ResponseEntity<WeeklyReportResponse> submitMyReport(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long projectId, @RequestParam(required = false) LocalDate weekStart) {
-		return ResponseEntity.ok(weeklyReportService.submitMyReport(principal, projectId, weekStart));
+			@RequestParam(required = false) LocalDate weekStart) {
+		return ResponseEntity.ok(weeklyReportService.submitMyReport(principal, weekStart));
 	}
 
 	@GetMapping("/team")
 	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
-	public ResponseEntity<TeamWeeklyReportResponse> getTeamReport(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long projectId, @RequestParam(required = false) LocalDate weekStart) {
-		return ResponseEntity.ok(weeklyReportService.getTeamReport(principal, projectId, weekStart));
+	public ResponseEntity<TeamDashboardResponse> getTeamDashboard(@AuthenticationPrincipal AuthenticatedUser principal,
+			@RequestParam(required = false) LocalDate weekStart) {
+		return ResponseEntity.ok(weeklyReportService.getTeamDashboard(principal, weekStart));
 	}
 
-	@PostMapping("/team/publish")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
-	public ResponseEntity<TeamWeeklyReportResponse> publishTeamReport(
-			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long projectId,
-			@RequestParam(required = false) LocalDate weekStart) {
-		return ResponseEntity.ok(weeklyReportService.publishTeamReport(principal, projectId, weekStart));
+	@GetMapping("/executive")
+	@PreAuthorize("hasRole('ADMIN')")
+	public ResponseEntity<ExecutiveDashboardResponse> getExecutiveDashboard(
+			@AuthenticationPrincipal AuthenticatedUser principal, @RequestParam(required = false) LocalDate weekStart) {
+		return ResponseEntity.ok(weeklyReportService.getExecutiveDashboard(principal, weekStart));
 	}
 
 	@GetMapping("/history")
 	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
 	public ResponseEntity<List<ReportHistoryItem>> getHistory(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long projectId, @RequestParam(required = false) LocalDate weekStart,
-			@RequestParam(required = false) String q) {
-		return ResponseEntity.ok(weeklyReportService.getHistory(principal, projectId, weekStart, q));
+			@RequestParam(required = false) LocalDate weekStart, @RequestParam(required = false) String q) {
+		return ResponseEntity.ok(weeklyReportService.getHistory(principal, weekStart, q));
 	}
 }
