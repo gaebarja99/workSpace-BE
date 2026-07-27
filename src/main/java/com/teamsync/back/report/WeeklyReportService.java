@@ -12,7 +12,6 @@ import com.teamsync.back.report.dto.ExecutiveDashboardResponse;
 import com.teamsync.back.report.dto.ExecutiveMemberEntries;
 import com.teamsync.back.report.dto.MemberSubmissionStatus;
 import com.teamsync.back.report.dto.ReportEntries;
-import com.teamsync.back.report.dto.ReportHistoryItem;
 import com.teamsync.back.report.dto.TeamDashboardResponse;
 import com.teamsync.back.report.dto.TeamMemberReportEntries;
 import com.teamsync.back.report.dto.TeamWeeklyReportExportView;
@@ -32,7 +31,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -215,42 +213,6 @@ public class WeeklyReportService {
 		return new ExecutiveCategoryGroup(major.getId(), major.getName(), memberEntries);
 	}
 
-	// ----- 보고 이력 -----
-
-	@Transactional(readOnly = true)
-	public List<ReportHistoryItem> getHistory(AuthenticatedUser principal, LocalDate weekStartParam, String q) {
-		Long workspaceId = principal.workspaceId();
-
-		Set<LocalDate> allWeeks = new TreeSet<>(Comparator.reverseOrder());
-		allWeeks.addAll(weeklyReportRepository.findDistinctWeekStartsByWorkspaceId(workspaceId));
-
-		List<LocalDate> candidateWeeks;
-		if (weekStartParam != null) {
-			LocalDate normalized = resolveWeekStart(weekStartParam);
-			candidateWeeks = allWeeks.contains(normalized) ? List.of(normalized) : List.of();
-		} else {
-			candidateWeeks = new ArrayList<>(allWeeks);
-		}
-
-		String keyword = (q != null && !q.isBlank()) ? escapeLikeWildcards(q.trim()) : null;
-		List<User> members = reportMembers(workspaceId);
-		List<Long> userIds = members.stream().map(User::getId).toList();
-		int totalMemberCount = members.size();
-
-		List<ReportHistoryItem> result = new ArrayList<>();
-		for (LocalDate weekStart : candidateWeeks) {
-			LocalDate weekEnd = weekEndOf(weekStart);
-			if (keyword != null && !weeklyReportEntryRepository.existsKeywordMatch(workspaceId, weekStart, keyword)) {
-				continue;
-			}
-			long submittedCount = weeklyReportRepository
-					.countByUser_IdInAndWeekStartAndStatus(userIds, weekStart, WeeklyReportStatus.SUBMITTED);
-			double completionRate = totalMemberCount == 0 ? 0.0 : (double) submittedCount / totalMemberCount;
-			result.add(new ReportHistoryItem(weekStart, weekEnd, (int) submittedCount, totalMemberCount, completionRate));
-		}
-		return result;
-	}
-
 	// ----- FR-409: 보고서 내보내기(PDF/이메일/xlsx) -----
 
 	/**
@@ -334,11 +296,6 @@ public class WeeklyReportService {
 
 	private static LocalDate weekEndOf(LocalDate weekStart) {
 		return weekStart.plusDays(6);
-	}
-
-	// FR-004/FR-410과 동일 원칙: LIKE 와일드카드(%, _) 이스케이프.
-	private static String escapeLikeWildcards(String value) {
-		return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
 	}
 
 	/**

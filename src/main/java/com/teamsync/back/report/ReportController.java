@@ -3,12 +3,10 @@ package com.teamsync.back.report;
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.report.dto.EntriesReplaceRequest;
 import com.teamsync.back.report.dto.ExecutiveDashboardResponse;
-import com.teamsync.back.report.dto.ReportHistoryItem;
 import com.teamsync.back.report.dto.TeamDashboardResponse;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
-import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -69,12 +67,5 @@ public class ReportController {
 	public ResponseEntity<ExecutiveDashboardResponse> getExecutiveDashboard(
 			@AuthenticationPrincipal AuthenticatedUser principal, @RequestParam(required = false) LocalDate weekStart) {
 		return ResponseEntity.ok(weeklyReportService.getExecutiveDashboard(principal, weekStart));
-	}
-
-	@GetMapping("/history")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
-	public ResponseEntity<List<ReportHistoryItem>> getHistory(@AuthenticationPrincipal AuthenticatedUser principal,
-			@RequestParam(required = false) LocalDate weekStart, @RequestParam(required = false) String q) {
-		return ResponseEntity.ok(weeklyReportService.getHistory(principal, weekStart, q));
 	}
 }
