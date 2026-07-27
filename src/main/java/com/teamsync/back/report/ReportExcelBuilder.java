@@ -52,10 +52,11 @@ final class ReportExcelBuilder {
 	};
 	private static final int[] ENTRY_COLUMN_WIDTHS = {4200, 4200, 4200, 9500, 2800, 9500, 2800};
 
-	private static final String[] EXECUTIVE_COLUMNS = {
-			"프로젝트명", "프로젝트 달성률", "참여 인원", "담당자", "분류", "상세 업무 내용", "상태/달성률", "구분"
-	};
-	private static final int[] EXECUTIVE_COLUMN_WIDTHS = {6500, 3200, 5500, 3200, 3800, 11000, 4200, 2400};
+	private static final int EXECUTIVE_FIXED_COLUMNS = 3; // No. / 프로젝트명 / 담당자
+	private static final int EXECUTIVE_MONTH_COUNT = 12;
+	private static final int EXECUTIVE_WEEKS_PER_MONTH = 4;
+	private static final int[] EXECUTIVE_FIXED_COLUMN_WIDTHS = {1800, 7500, 5500};
+	private static final int EXECUTIVE_WEEK_COLUMN_WIDTH = 1800;
 
 	private ReportExcelBuilder() {
 	}
@@ -103,115 +104,147 @@ final class ReportExcelBuilder {
 	}
 
 	/**
-	 * 대표 뷰: 대분류(프로젝트)별로 프로젝트명/달성률/참여 인원을 병합한 한 표로 렌더링한다. 같은
-	 * 업무라도 금주/차주 계획이 각각 다른 행으로 나오되 "구분" 칼럼과 배경색으로 구별한다.
+	 * 프로젝트 진척률: 대분류(프로젝트) 1개당 한 행으로, 연간 12개월×4주 그리드에서 조회한 주에 해당하는
+	 * 칸에만 달성률을 표시한다(이월 데이터가 없어 다른 주/월 칸은 비워 둔 채로 매주 갱신하며 채워 나간다).
 	 */
 	static byte[] buildExecutiveWorkbook(ExecutiveDashboardResponse view) {
+		int totalColumns = EXECUTIVE_FIXED_COLUMNS + EXECUTIVE_MONTH_COUNT * EXECUTIVE_WEEKS_PER_MONTH;
 		try (XSSFWorkbook workbook = new XSSFWorkbook()) {
-			Sheet sheet = workbook.createSheet("대표 뷰");
+			Sheet sheet = workbook.createSheet("프로젝트 진척률");
 			Styles styles = new Styles(workbook);
-			int rowIndex = writeTitleRow(sheet, styles, 0,
-					"대표 뷰 (" + view.weekStart().format(DATE) + " ~ " + view.weekEnd().format(DATE) + ")",
-					EXECUTIVE_COLUMNS.length);
-			rowIndex++;
+			int rowIndex = writeTitleRow(sheet, styles, 0, "프로젝트 진척률(%)", totalColumns);
 
-			int headerRowIndex = rowIndex;
-			writeExecutiveHeaderRow(sheet, styles, headerRowIndex);
-			rowIndex = headerRowIndex + 1;
-			sheet.createFreezePane(0, rowIndex);
+			int headerTopRow = rowIndex;
+			int headerBottomRow = headerTopRow + 2;
+			writeExecutiveHeaderRows(sheet, styles, headerTopRow, view.weekStart().getYear());
+			rowIndex = headerBottomRow + 1;
+			sheet.createFreezePane(EXECUTIVE_FIXED_COLUMNS, rowIndex);
 
+			int monthIndex = view.weekStart().getMonthValue() - 1;
+			int weekIndex = weekIndexOf(view.weekStart());
+
+			int no = 1;
 			for (ExecutiveCategoryGroup category : view.categories()) {
-				rowIndex = writeExecutiveCategoryBlock(sheet, styles, rowIndex, category);
+				Integer rate = projectRate(category);
+				if (rate == null) {
+					continue;
+				}
+				writeExecutiveProjectRow(sheet, styles, rowIndex++, no++, category, rate, monthIndex, weekIndex);
 			}
 
-			if (rowIndex > headerRowIndex + 1) {
-				sheet.setAutoFilter(new CellRangeAddress(headerRowIndex, headerRowIndex,
-						0, EXECUTIVE_COLUMNS.length - 1));
+			if (rowIndex > headerBottomRow + 1) {
+				sheet.setAutoFilter(new CellRangeAddress(headerBottomRow, headerBottomRow, 0, totalColumns - 1));
 			}
-			applyColumnWidths(sheet, EXECUTIVE_COLUMN_WIDTHS);
+			applyColumnWidths(sheet, executiveColumnWidths());
 			return toBytes(workbook);
 		} catch (IOException e) {
-			throw new UncheckedIOException("대표 뷰 xlsx 생성에 실패했습니다.", e);
+			throw new UncheckedIOException("프로젝트 진척률 xlsx 생성에 실패했습니다.", e);
 		}
 	}
 
-	// ----- 대표 뷰 -----
+	// ----- 프로젝트 진척률 -----
 
-	private static void writeExecutiveHeaderRow(Sheet sheet, Styles styles, int rowIndex) {
-		Row headerRow = sheet.createRow(rowIndex);
-		for (int i = 0; i < EXECUTIVE_COLUMNS.length; i++) {
-			Cell cell = headerRow.createCell(i);
-			cell.setCellValue(EXECUTIVE_COLUMNS[i]);
-			cell.setCellStyle(styles.header);
+	private static int weekIndexOf(java.time.LocalDate date) {
+		int day = date.getDayOfMonth();
+		if (day <= 7) {
+			return 0;
+		}
+		if (day <= 14) {
+			return 1;
+		}
+		if (day <= 21) {
+			return 2;
+		}
+		return 3;
+	}
+
+	private static int[] executiveColumnWidths() {
+		int[] widths = new int[EXECUTIVE_FIXED_COLUMNS + EXECUTIVE_MONTH_COUNT * EXECUTIVE_WEEKS_PER_MONTH];
+		System.arraycopy(EXECUTIVE_FIXED_COLUMN_WIDTHS, 0, widths, 0, EXECUTIVE_FIXED_COLUMNS);
+		for (int i = EXECUTIVE_FIXED_COLUMNS; i < widths.length; i++) {
+			widths[i] = EXECUTIVE_WEEK_COLUMN_WIDTH;
+		}
+		return widths;
+	}
+
+	/** No./프로젝트명/담당자(3행 세로 병합) + 연도/월/주 3단 그리드 헤더를 만든다. */
+	private static void writeExecutiveHeaderRows(Sheet sheet, Styles styles, int topRow, int year) {
+		Row yearRow = sheet.createRow(topRow);
+		Row monthRow = sheet.createRow(topRow + 1);
+		Row weekRow = sheet.createRow(topRow + 2);
+
+		String[] fixedLabels = {"No.", "프로젝트명", "담당자"};
+		for (int i = 0; i < fixedLabels.length; i++) {
+			setCell(yearRow, i, fixedLabels[i], styles.header);
+			monthRow.createCell(i).setCellStyle(styles.header);
+			weekRow.createCell(i).setCellStyle(styles.header);
+			mergeIfMultiRow(sheet, topRow, topRow + 2, i);
+		}
+
+		int gridStart = EXECUTIVE_FIXED_COLUMNS;
+		int gridEnd = gridStart + EXECUTIVE_MONTH_COUNT * EXECUTIVE_WEEKS_PER_MONTH - 1;
+		setCell(yearRow, gridStart, year + "년", styles.header);
+		for (int c = gridStart + 1; c <= gridEnd; c++) {
+			yearRow.createCell(c).setCellStyle(styles.header);
+		}
+		sheet.addMergedRegion(new CellRangeAddress(topRow, topRow, gridStart, gridEnd));
+
+		for (int m = 0; m < EXECUTIVE_MONTH_COUNT; m++) {
+			int monthStart = gridStart + m * EXECUTIVE_WEEKS_PER_MONTH;
+			int monthEnd = monthStart + EXECUTIVE_WEEKS_PER_MONTH - 1;
+			setCell(monthRow, monthStart, (m + 1) + "월", styles.header);
+			for (int c = monthStart + 1; c <= monthEnd; c++) {
+				monthRow.createCell(c).setCellStyle(styles.header);
+			}
+			sheet.addMergedRegion(new CellRangeAddress(topRow + 1, topRow + 1, monthStart, monthEnd));
+
+			for (int w = 0; w < EXECUTIVE_WEEKS_PER_MONTH; w++) {
+				setCell(weekRow, monthStart + w, "W" + (w + 1), styles.header);
+			}
 		}
 	}
 
-	private static int writeExecutiveCategoryBlock(Sheet sheet, Styles styles, int rowIndex,
-			ExecutiveCategoryGroup category) {
-		record ExecutiveRow(String memberName, EntryResponse entry, String weekLabel) {
-		}
-
-		List<ExecutiveRow> rows = new ArrayList<>();
-		Set<String> participants = new LinkedHashSet<>();
+	private static Integer projectRate(ExecutiveCategoryGroup category) {
 		int rateSum = 0;
+		int count = 0;
+		for (ExecutiveMemberEntries member : category.members()) {
+			for (EntryResponse entry : member.thisWeekEntries()) {
+				rateSum += entry.ratePercent();
+				count++;
+			}
+			for (EntryResponse entry : member.nextWeekEntries()) {
+				rateSum += entry.ratePercent();
+				count++;
+			}
+		}
+		return count == 0 ? null : Math.round((float) rateSum / count);
+	}
 
+	private static void writeExecutiveProjectRow(Sheet sheet, Styles styles, int rowIndex, int no,
+			ExecutiveCategoryGroup category, int projectRate, int monthIndex, int weekIndex) {
+		Set<String> participants = new LinkedHashSet<>();
 		for (ExecutiveMemberEntries member : category.members()) {
 			if (!member.thisWeekEntries().isEmpty() || !member.nextWeekEntries().isEmpty()) {
 				participants.add(member.name());
 			}
-			for (EntryResponse entry : member.thisWeekEntries()) {
-				rows.add(new ExecutiveRow(member.name(), entry, "금주"));
-				rateSum += entry.ratePercent();
-			}
-			for (EntryResponse entry : member.nextWeekEntries()) {
-				rows.add(new ExecutiveRow(member.name(), entry, "차주"));
-				rateSum += entry.ratePercent();
-			}
 		}
-
-		if (rows.isEmpty()) {
-			return rowIndex;
-		}
-
-		int blockStart = rowIndex;
-		int projectRate = Math.round((float) rateSum / rows.size());
 		String participantsLabel = String.join(", ", participants);
 
-		boolean zebra = false;
-		for (ExecutiveRow entryRow : rows) {
-			Row row = sheet.createRow(rowIndex++);
-			CellStyle rowStyle = zebra ? styles.bodyAlt : styles.body;
-			zebra = !zebra;
+		Row row = sheet.createRow(rowIndex);
+		setNumericCell(row, 0, no, styles.projectMerged);
+		setCell(row, 1, category.majorCategoryName(), styles.projectMerged);
+		setCell(row, 2, participantsLabel, styles.projectMerged);
 
-			setCell(row, 0, category.majorCategoryName(), styles.projectMerged);
-			setNumericCell(row, 1, projectRate, styles.projectMergedCenter);
-			setCell(row, 2, participantsLabel, styles.projectMerged);
-			setCell(row, 3, entryRow.memberName(), rowStyle);
-			setCell(row, 4, entryRow.entry().middleCategoryName(), rowStyle);
-			setCell(row, 5, entryRow.entry().detail(), rowStyle);
-			setCell(row, 6, statusLabel(entryRow.entry().ratePercent()), rowStyle);
-			Cell weekCell = row.createCell(7);
-			weekCell.setCellValue(entryRow.weekLabel());
-			weekCell.setCellStyle("금주".equals(entryRow.weekLabel()) ? styles.weekThisBadge : styles.weekNextBadge);
+		int gridStart = EXECUTIVE_FIXED_COLUMNS;
+		int gridEnd = gridStart + EXECUTIVE_MONTH_COUNT * EXECUTIVE_WEEKS_PER_MONTH - 1;
+		for (int c = gridStart; c <= gridEnd; c++) {
+			row.createCell(c).setCellStyle(styles.body);
 		}
 
-		int blockEnd = rowIndex - 1;
-		if (blockEnd > blockStart) {
-			mergeIfMultiRow(sheet, blockStart, blockEnd, 0);
-			mergeIfMultiRow(sheet, blockStart, blockEnd, 1);
-			mergeIfMultiRow(sheet, blockStart, blockEnd, 2);
-		}
-		return rowIndex;
-	}
-
-	private static String statusLabel(int ratePercent) {
-		if (ratePercent >= 100) {
-			return "완료 (100%)";
-		}
-		if (ratePercent <= 0) {
-			return "예정 (0%)";
-		}
-		return "진행 중 (" + ratePercent + "%)";
+		int rateColumn = gridStart + monthIndex * EXECUTIVE_WEEKS_PER_MONTH + weekIndex;
+		Cell rateCell = row.getCell(rateColumn);
+		rateCell.setCellValue(projectRate + "%");
+		rateCell.setCellStyle(styles.weekThisBadge);
 	}
 
 	private static void mergeIfMultiRow(Sheet sheet, int firstRow, int lastRow, int column) {
@@ -373,9 +406,7 @@ final class ReportExcelBuilder {
 		private final CellStyle body;
 		private final CellStyle bodyAlt;
 		private final CellStyle projectMerged;
-		private final CellStyle projectMergedCenter;
 		private final CellStyle weekThisBadge;
-		private final CellStyle weekNextBadge;
 
 		private Styles(XSSFWorkbook workbook) {
 			Font titleFont = workbook.createFont();
@@ -414,20 +445,10 @@ final class ReportExcelBuilder {
 			projectFont.setBold(true);
 			projectMerged.setFont(projectFont);
 
-			projectMergedCenter = workbook.createCellStyle();
-			projectMergedCenter.cloneStyleFrom(projectMerged);
-			org.apache.poi.ss.usermodel.DataFormat format = workbook.createDataFormat();
-			projectMergedCenter.setDataFormat(format.getFormat("0\"%\""));
-
 			weekThisBadge = workbook.createCellStyle();
 			weekThisBadge.cloneStyleFrom(body);
 			weekThisBadge.setAlignment(HorizontalAlignment.CENTER);
 			applyCustomFill((XSSFCellStyle) weekThisBadge, new XSSFColor(new byte[] {(byte) 0xDD, (byte) 0xEB, (byte) 0xF7}, null));
-
-			weekNextBadge = workbook.createCellStyle();
-			weekNextBadge.cloneStyleFrom(body);
-			weekNextBadge.setAlignment(HorizontalAlignment.CENTER);
-			applyCustomFill((XSSFCellStyle) weekNextBadge, new XSSFColor(new byte[] {(byte) 0xFD, (byte) 0xEA, (byte) 0xD7}, null));
 		}
 
 		private static CellStyle baseHeaderStyle(XSSFWorkbook workbook, Short indexedColor, boolean whiteFont) {

@@ -38,7 +38,7 @@ public class ReportExcelExportService {
 	public ReportExcelFile exportExecutiveExcel(AuthenticatedUser principal, LocalDate weekStart) {
 		ExecutiveDashboardResponse view = weeklyReportService.getExecutiveDashboard(principal, weekStart);
 		byte[] bytes = ReportExcelBuilder.buildExecutiveWorkbook(view);
-		return new ReportExcelFile(fileName("대표_뷰", view.weekStart()), bytes);
+		return new ReportExcelFile(fileName("프로젝트_진척률", view.weekStart()), bytes);
 	}
 
 	private static String fileName(String label, LocalDate weekStart) {
