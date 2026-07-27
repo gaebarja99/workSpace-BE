@@ -1,5 +1,6 @@
 package com.teamsync.back.project.dto;
 
+import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 
 /**
@@ -9,9 +10,10 @@ import com.teamsync.back.user.User;
 public record MemberSummaryResponse(
 		Long userId,
 		String name,
-		String email
+		String email,
+		Role role
 ) {
 	public static MemberSummaryResponse from(User user) {
-		return new MemberSummaryResponse(user.getId(), user.getName(), user.getEmail());
+		return new MemberSummaryResponse(user.getId(), user.getName(), user.getEmail(), user.getRole());
 	}
 }
