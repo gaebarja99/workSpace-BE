@@ -5,11 +5,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.teamsync.back.auth.AuthenticatedUser;
+import com.teamsync.back.common.exception.LastProjectMemberException;
+import com.teamsync.back.common.exception.MemberNotFoundException;
 import com.teamsync.back.common.exception.ProjectHasDependenciesException;
+import com.teamsync.back.common.exception.ProjectMemberAlreadyExistsException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
+import com.teamsync.back.common.exception.RemoveProjectCreatorException;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
 import com.teamsync.back.user.Role;
+import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
 import com.teamsync.back.workspace.Workspace;
 import com.teamsync.back.workspace.WorkspaceRepository;
@@ -19,6 +24,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -43,6 +49,9 @@ class ProjectServiceTest {
 	@Mock
 	private RecurringTaskTemplateRepository recurringTaskTemplateRepository;
 
+	@Mock
+	private ProjectMemberRepository projectMemberRepository;
+
 	private ProjectService projectService;
 	private Workspace workspace;
 	private AuthenticatedUser adminPrincipal;
@@ -50,24 +59,147 @@ class ProjectServiceTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		projectService = new ProjectService(projectRepository, workspaceRepository, userRepository, taskRepository,
-				recurringTaskTemplateRepository);
+				recurringTaskTemplateRepository, projectMemberRepository);
 		workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
 		adminPrincipal = new AuthenticatedUser(1L, 10L, "admin@growtech.io", Role.ADMIN);
 	}
 
 	@Test
-	void 관리자_목록_조회시_memberCount는_워크스페이스_전체_User_수로_근사한다() throws Exception {
+	void 관리자_목록_조회시_memberCount는_project_members_실제_등록_인원수다() throws Exception {
 		Project project = newProject("알파", workspace);
 		setId(project, 100L);
 		when(projectRepository.findAllByWorkspaceIdOrderByCreatedAtDesc(10L)).thenReturn(List.of(project));
-		when(userRepository.countByWorkspaceId(10L)).thenReturn(5L);
+		when(projectMemberRepository.countByProject_Id(100L)).thenReturn(5L);
 
 		var result = projectService.listProjectsForAdmin(adminPrincipal);
 
 		assertThat(result).hasSize(1);
 		assertThat(result.get(0).memberCount()).isEqualTo(5L);
 		assertThat(result.get(0).status()).isEqualTo("ACTIVE");
+	}
+
+	@Test
+	void 프로젝트_생성시_생성자가_자동으로_첫_멤버로_등록된다() throws Exception {
+		User creator = new User(workspace, "admin@growtech.io", "hash", "관리자", Role.ADMIN);
+		setId(creator, 1L);
+		when(workspaceRepository.getReferenceById(10L)).thenReturn(workspace);
+		when(userRepository.getReferenceById(1L)).thenReturn(creator);
+		Project saved = newProject("알파", workspace);
+		setId(saved, 100L);
+		when(projectRepository.save(org.mockito.ArgumentMatchers.any(Project.class))).thenReturn(saved);
+
+		projectService.createProject(adminPrincipal,
+				new com.teamsync.back.project.dto.ProjectCreateRequest("알파", "설명"));
+
+		ArgumentCaptor<ProjectMember> captor = ArgumentCaptor.forClass(ProjectMember.class);
+		org.mockito.Mockito.verify(projectMemberRepository).save(captor.capture());
+		assertThat(captor.getValue().getUser()).isEqualTo(creator);
+		assertThat(captor.getValue().getProject()).isEqualTo(saved);
+	}
+
+	@Test
+	void 멤버_목록_조회는_실제_project_members만_반환한다() throws Exception {
+		Project project = newProject("알파", workspace);
+		setId(project, 100L);
+		User member = new User(workspace, "member@growtech.io", "hash", "멤버", Role.STAFF);
+		setId(member, 2L);
+		ProjectMember projectMember = new ProjectMember(project, member);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+		when(projectMemberRepository.findAllByProject_IdOrderByUser_NameAsc(100L)).thenReturn(List.of(projectMember));
+
+		var result = projectService.listMembers(adminPrincipal, 100L);
+
+		assertThat(result).hasSize(1);
+		assertThat(result.get(0).userId()).isEqualTo(2L);
+		org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).findAllByWorkspaceIdOrderByNameAsc(10L);
+	}
+
+	@Test
+	void 멤버_추가는_같은_워크스페이스_사용자만_허용한다() throws Exception {
+		Project project = newProject("알파", workspace);
+		setId(project, 100L);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+		when(userRepository.findByIdAndWorkspaceId(2L, 10L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> projectService.addMember(adminPrincipal, 100L, 2L))
+				.isInstanceOf(MemberNotFoundException.class);
+	}
+
+	@Test
+	void 이미_멤버인_사용자_추가시_예외() throws Exception {
+		Project project = newProject("알파", workspace);
+		setId(project, 100L);
+		User user = new User(workspace, "member@growtech.io", "hash", "멤버", Role.STAFF);
+		setId(user, 2L);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+		when(userRepository.findByIdAndWorkspaceId(2L, 10L)).thenReturn(Optional.of(user));
+		when(projectMemberRepository.existsByProject_IdAndUser_Id(100L, 2L)).thenReturn(true);
+
+		assertThatThrownBy(() -> projectService.addMember(adminPrincipal, 100L, 2L))
+				.isInstanceOf(ProjectMemberAlreadyExistsException.class);
+	}
+
+	@Test
+	void 멤버_추가_정상_케이스() throws Exception {
+		Project project = newProject("알파", workspace);
+		setId(project, 100L);
+		User user = new User(workspace, "member@growtech.io", "hash", "멤버", Role.STAFF);
+		setId(user, 2L);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+		when(userRepository.findByIdAndWorkspaceId(2L, 10L)).thenReturn(Optional.of(user));
+		when(projectMemberRepository.existsByProject_IdAndUser_Id(100L, 2L)).thenReturn(false);
+		when(projectRepository.getReferenceById(100L)).thenReturn(project);
+
+		var result = projectService.addMember(adminPrincipal, 100L, 2L);
+
+		assertThat(result.userId()).isEqualTo(2L);
+		org.mockito.Mockito.verify(projectMemberRepository).save(org.mockito.ArgumentMatchers.any(ProjectMember.class));
+	}
+
+	@Test
+	void 프로젝트_생성자는_제거할_수_없다() throws Exception {
+		User creator = new User(workspace, "admin@growtech.io", "hash", "관리자", Role.ADMIN);
+		setId(creator, 1L);
+		Project project = newProject("알파", workspace, creator);
+		setId(project, 100L);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+		when(projectMemberRepository.findByProject_IdAndUser_Id(100L, 1L))
+				.thenReturn(Optional.of(new ProjectMember(project, creator)));
+
+		assertThatThrownBy(() -> projectService.removeMember(adminPrincipal, 100L, 1L))
+				.isInstanceOf(RemoveProjectCreatorException.class);
+	}
+
+	@Test
+	void 마지막_멤버는_제거할_수_없다() throws Exception {
+		User member = new User(workspace, "member@growtech.io", "hash", "멤버", Role.STAFF);
+		setId(member, 2L);
+		Project project = newProject("알파", workspace, null);
+		setId(project, 100L);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+		when(projectMemberRepository.findByProject_IdAndUser_Id(100L, 2L))
+				.thenReturn(Optional.of(new ProjectMember(project, member)));
+		when(projectMemberRepository.countByProject_Id(100L)).thenReturn(1L);
+
+		assertThatThrownBy(() -> projectService.removeMember(adminPrincipal, 100L, 2L))
+				.isInstanceOf(LastProjectMemberException.class);
+	}
+
+	@Test
+	void 멤버_제거_정상_케이스() throws Exception {
+		User member = new User(workspace, "member@growtech.io", "hash", "멤버", Role.STAFF);
+		setId(member, 2L);
+		Project project = newProject("알파", workspace, null);
+		setId(project, 100L);
+		ProjectMember projectMember = new ProjectMember(project, member);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+		when(projectMemberRepository.findByProject_IdAndUser_Id(100L, 2L)).thenReturn(Optional.of(projectMember));
+		when(projectMemberRepository.countByProject_Id(100L)).thenReturn(2L);
+
+		projectService.removeMember(adminPrincipal, 100L, 2L);
+
+		org.mockito.Mockito.verify(projectMemberRepository).delete(projectMember);
 	}
 
 	@Test
@@ -109,7 +241,7 @@ class ProjectServiceTest {
 		Project project = newProject("베타", workspace);
 		setId(project, 200L);
 		when(projectRepository.findByIdAndWorkspaceId(200L, 10L)).thenReturn(Optional.of(project));
-		when(userRepository.countByWorkspaceId(10L)).thenReturn(3L);
+		when(projectMemberRepository.countByProject_Id(200L)).thenReturn(3L);
 
 		var result = projectService.changeStatus(adminPrincipal, 200L, ProjectStatus.ARCHIVED);
 
@@ -158,6 +290,10 @@ class ProjectServiceTest {
 
 	private Project newProject(String name, Workspace workspace) {
 		return new Project(workspace, name, "설명", null);
+	}
+
+	private Project newProject(String name, Workspace workspace, User createdBy) {
+		return new Project(workspace, name, "설명", createdBy);
 	}
 
 	private void setId(Object entity, Long id) throws Exception {

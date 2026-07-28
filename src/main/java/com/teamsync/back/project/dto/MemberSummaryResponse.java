@@ -4,8 +4,8 @@ import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 
 /**
- * FR-301 담당자 선택용 프로젝트 멤버 목록(GET /api/projects/{projectId}/members) 응답.
- * 프로젝트 단위 멤버십 테이블이 없으므로 "프로젝트 멤버" = "해당 프로젝트가 속한 workspace의 모든 User"다.
+ * FR-301 담당자 선택용 프로젝트 멤버 목록(GET /api/projects/{projectId}/members) 및 후보/추가 응답.
+ * project_members 테이블에 실제로 등록된 사용자만 "프로젝트 멤버"로 취급한다(V26).
  */
 public record MemberSummaryResponse(
 		Long userId,

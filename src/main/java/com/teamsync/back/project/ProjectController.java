@@ -1,6 +1,7 @@
 package com.teamsync.back.project;
 
 import com.teamsync.back.auth.AuthenticatedUser;
+import com.teamsync.back.project.dto.AddMemberRequest;
 import com.teamsync.back.project.dto.MemberSummaryResponse;
 import com.teamsync.back.project.dto.ProjectCreateRequest;
 import com.teamsync.back.project.dto.ProjectResponse;
@@ -10,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,5 +57,31 @@ public class ProjectController {
 	public ResponseEntity<List<MemberSummaryResponse>> listMembers(
 			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long projectId) {
 		return ResponseEntity.ok(projectService.listMembers(principal, projectId));
+	}
+
+	// FR-301 프로젝트 멤버 추가용 후보 목록: 실제 멤버 추가는 ADMIN/LEADER만 가능하므로 후보 조회도 동일하게 제한한다.
+	@GetMapping("/{projectId}/members/candidates")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
+	public ResponseEntity<List<MemberSummaryResponse>> listCandidateMembers(
+			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long projectId) {
+		return ResponseEntity.ok(projectService.listCandidateMembers(principal, projectId));
+	}
+
+	// FR-301 프로젝트 멤버 추가.
+	@PostMapping("/{projectId}/members")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
+	public ResponseEntity<MemberSummaryResponse> addMember(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long projectId, @Valid @RequestBody AddMemberRequest request) {
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(projectService.addMember(principal, projectId, request.userId()));
+	}
+
+	// FR-301 프로젝트 멤버 제거.
+	@DeleteMapping("/{projectId}/members/{userId}")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
+	public ResponseEntity<Void> removeMember(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long projectId, @PathVariable Long userId) {
+		projectService.removeMember(principal, projectId, userId);
+		return ResponseEntity.noContent().build();
 	}
 }

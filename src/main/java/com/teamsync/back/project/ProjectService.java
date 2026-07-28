@@ -1,8 +1,13 @@
 package com.teamsync.back.project;
 
 import com.teamsync.back.auth.AuthenticatedUser;
+import com.teamsync.back.common.exception.LastProjectMemberException;
+import com.teamsync.back.common.exception.MemberNotFoundException;
 import com.teamsync.back.common.exception.ProjectHasDependenciesException;
+import com.teamsync.back.common.exception.ProjectMemberAlreadyExistsException;
+import com.teamsync.back.common.exception.ProjectMemberNotFoundException;
 import com.teamsync.back.common.exception.ProjectNotFoundException;
+import com.teamsync.back.common.exception.RemoveProjectCreatorException;
 import com.teamsync.back.project.dto.MemberSummaryResponse;
 import com.teamsync.back.project.dto.ProjectAdminResponse;
 import com.teamsync.back.project.dto.ProjectCreateRequest;
@@ -15,6 +20,7 @@ import com.teamsync.back.user.UserRepository;
 import com.teamsync.back.workspace.Workspace;
 import com.teamsync.back.workspace.WorkspaceRepository;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,17 +38,21 @@ public class ProjectService {
 	private final UserRepository userRepository;
 	private final TaskRepository taskRepository;
 	private final RecurringTaskTemplateRepository recurringTaskTemplateRepository;
+	private final ProjectMemberRepository projectMemberRepository;
 
 	public ProjectService(ProjectRepository projectRepository, WorkspaceRepository workspaceRepository,
 			UserRepository userRepository, TaskRepository taskRepository,
-			RecurringTaskTemplateRepository recurringTaskTemplateRepository) {
+			RecurringTaskTemplateRepository recurringTaskTemplateRepository,
+			ProjectMemberRepository projectMemberRepository) {
 		this.projectRepository = projectRepository;
 		this.workspaceRepository = workspaceRepository;
 		this.userRepository = userRepository;
 		this.taskRepository = taskRepository;
 		this.recurringTaskTemplateRepository = recurringTaskTemplateRepository;
+		this.projectMemberRepository = projectMemberRepository;
 	}
 
+	/** FR-301 프로젝트 멤버십 테이블(project_members) 도입: 생성자는 자동으로 첫 멤버가 된다. */
 	@Transactional
 	public ProjectResponse createProject(AuthenticatedUser principal, ProjectCreateRequest request) {
 		Workspace workspace = workspaceRepository.getReferenceById(principal.workspaceId());
@@ -50,6 +60,7 @@ public class ProjectService {
 
 		Project project = projectRepository.save(
 				new Project(workspace, request.name().trim(), request.description(), createdBy));
+		projectMemberRepository.save(new ProjectMember(project, createdBy));
 
 		return ProjectResponse.from(project);
 	}
@@ -73,28 +84,80 @@ public class ProjectService {
 	}
 
 	/**
-	 * FR-301 담당자 선택용 선행 요구사항(GET /api/projects/{projectId}/members): 프로젝트별 멤버십
-	 * 테이블이 없으므로 project가 속한 workspace의 모든 User를 "멤버"로 반환한다. 조회 전용이라 role
-	 * 제한 없이 인증된 누구나(GUEST 포함) 호출 가능하다(컨트롤러에 @PreAuthorize 없음).
+	 * FR-301 담당자 선택용 선행 요구사항(GET /api/projects/{projectId}/members): project_members
+	 * 테이블에 실제로 등록된 멤버만 반환한다(더 이상 workspace 전체 User로 근사하지 않는다). 조회 전용이라
+	 * role 제한 없이 인증된 누구나(GUEST 포함) 호출 가능하다(컨트롤러에 @PreAuthorize 없음).
 	 */
 	@Transactional(readOnly = true)
 	public List<MemberSummaryResponse> listMembers(AuthenticatedUser principal, Long projectId) {
 		projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
 				.orElseThrow(ProjectNotFoundException::new);
-		return userRepository.findAllByWorkspaceIdOrderByNameAsc(principal.workspaceId()).stream()
+		return projectMemberRepository.findAllByProject_IdOrderByUser_NameAsc(projectId).stream()
+				.map(ProjectMember::getUser)
 				.map(MemberSummaryResponse::from)
 				.toList();
 	}
 
 	/**
-	 * 프로젝트 관리(관리자, P2): GET /api/admin/projects. memberCount는 프로젝트별 멤버십 테이블이
-	 * 없으므로 listMembers()와 동일하게 workspace 전체 User 수로 근사한다.
+	 * FR-301 프로젝트 멤버 추가용 후보 목록(GET /api/projects/{projectId}/members/candidates):
+	 * workspace 전체 User 중 아직 해당 프로젝트 멤버가 아닌 사용자만 반환한다. ADMIN/LEADER만 호출 가능.
+	 */
+	@Transactional(readOnly = true)
+	public List<MemberSummaryResponse> listCandidateMembers(AuthenticatedUser principal, Long projectId) {
+		projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+				.orElseThrow(ProjectNotFoundException::new);
+		Set<Long> existingMemberIds = Set.copyOf(projectMemberRepository.findUserIdsByProject_Id(projectId));
+		return userRepository.findAllByWorkspaceIdOrderByNameAsc(principal.workspaceId()).stream()
+				.filter(user -> !existingMemberIds.contains(user.getId()))
+				.map(MemberSummaryResponse::from)
+				.toList();
+	}
+
+	/**
+	 * FR-301 프로젝트 멤버 추가(POST /api/projects/{projectId}/members): 대상 사용자가 같은
+	 * workspace 소속인지 검증 후 project_members에 추가한다. ADMIN/LEADER만 호출 가능.
+	 */
+	@Transactional
+	public MemberSummaryResponse addMember(AuthenticatedUser principal, Long projectId, Long userId) {
+		projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+				.orElseThrow(ProjectNotFoundException::new);
+		User user = userRepository.findByIdAndWorkspaceId(userId, principal.workspaceId())
+				.orElseThrow(MemberNotFoundException::new);
+		if (projectMemberRepository.existsByProject_IdAndUser_Id(projectId, userId)) {
+			throw new ProjectMemberAlreadyExistsException();
+		}
+		Project projectRef = projectRepository.getReferenceById(projectId);
+		projectMemberRepository.save(new ProjectMember(projectRef, user));
+		return MemberSummaryResponse.from(user);
+	}
+
+	/**
+	 * FR-301 프로젝트 멤버 제거(DELETE /api/projects/{projectId}/members/{userId}): 프로젝트
+	 * 생성자는 제거할 수 없고, 마지막 남은 멤버도 제거할 수 없다(빈 프로젝트 방지). ADMIN/LEADER만 호출 가능.
+	 */
+	@Transactional
+	public void removeMember(AuthenticatedUser principal, Long projectId, Long userId) {
+		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+				.orElseThrow(ProjectNotFoundException::new);
+		ProjectMember member = projectMemberRepository.findByProject_IdAndUser_Id(projectId, userId)
+				.orElseThrow(ProjectMemberNotFoundException::new);
+		if (project.getCreatedBy() != null && project.getCreatedBy().getId().equals(userId)) {
+			throw new RemoveProjectCreatorException();
+		}
+		if (projectMemberRepository.countByProject_Id(projectId) <= 1) {
+			throw new LastProjectMemberException();
+		}
+		projectMemberRepository.delete(member);
+	}
+
+	/**
+	 * 프로젝트 관리(관리자, P2): GET /api/admin/projects. memberCount는 project_members 테이블의
+	 * 실제 등록 인원 수다(더 이상 workspace 전체 User 수로 근사하지 않는다).
 	 */
 	@Transactional(readOnly = true)
 	public List<ProjectAdminResponse> listProjectsForAdmin(AuthenticatedUser principal) {
-		long memberCount = userRepository.countByWorkspaceId(principal.workspaceId());
 		return projectRepository.findAllByWorkspaceIdOrderByCreatedAtDesc(principal.workspaceId()).stream()
-				.map(project -> ProjectAdminResponse.of(project, memberCount))
+				.map(project -> ProjectAdminResponse.of(project, projectMemberRepository.countByProject_Id(project.getId())))
 				.toList();
 	}
 
@@ -115,7 +178,7 @@ public class ProjectService {
 		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
 				.orElseThrow(ProjectNotFoundException::new);
 		project.changeStatus(newStatus);
-		long memberCount = userRepository.countByWorkspaceId(principal.workspaceId());
+		long memberCount = projectMemberRepository.countByProject_Id(projectId);
 		return ProjectAdminResponse.of(project, memberCount);
 	}
 
@@ -133,6 +196,8 @@ public class ProjectService {
 		if (hasDependencies(projectId)) {
 			throw new ProjectHasDependenciesException();
 		}
+		// project_members는 ON DELETE 정책이 없으므로(V26) 프로젝트 삭제 전에 멤버십 행을 먼저 정리한다.
+		projectMemberRepository.deleteByProject_Id(projectId);
 		projectRepository.delete(project);
 	}
 
