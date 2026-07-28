@@ -86,6 +86,25 @@ class ProjectServiceTest {
 	}
 
 	@Test
+	void 단건_조회는_같은_워크스페이스_프로젝트를_반환한다() throws Exception {
+		Project project = newProject("알파", workspace);
+		setId(project, 100L);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(project));
+
+		var result = projectService.getProject(adminPrincipal, 100L);
+
+		assertThat(result.name()).isEqualTo("알파");
+	}
+
+	@Test
+	void 다른_워크스페이스_프로젝트_단건_조회시_예외() {
+		when(projectRepository.findByIdAndWorkspaceId(999L, 10L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> projectService.getProject(adminPrincipal, 999L))
+				.isInstanceOf(ProjectNotFoundException.class);
+	}
+
+	@Test
 	void 상태_변경은_같은_워크스페이스_프로젝트에만_적용된다() throws Exception {
 		Project project = newProject("베타", workspace);
 		setId(project, 200L);

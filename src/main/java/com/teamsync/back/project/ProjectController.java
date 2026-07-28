@@ -43,6 +43,13 @@ public class ProjectController {
 		return ResponseEntity.ok(projectService.listProjects(principal));
 	}
 
+	// FR-4.2 프로젝트 단건 조회: listMembers와 동일하게 조회 전용이라 GUEST를 포함해 인증된 누구나 호출 가능하다.
+	@GetMapping("/{projectId}")
+	public ResponseEntity<ProjectResponse> get(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long projectId) {
+		return ResponseEntity.ok(projectService.getProject(principal, projectId));
+	}
+
 	// FR-301 담당자 선택용 선행 요구사항: 조회 전용이라 GUEST를 포함해 인증된 누구나 호출 가능하다.
 	@GetMapping("/{projectId}/members")
 	public ResponseEntity<List<MemberSummaryResponse>> listMembers(

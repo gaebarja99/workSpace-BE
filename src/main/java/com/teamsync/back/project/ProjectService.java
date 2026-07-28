@@ -62,6 +62,17 @@ public class ProjectService {
 	}
 
 	/**
+	 * FR-4.2 프로젝트 리스트 및 상세(GET /api/projects/{projectId}): listMembers()와 동일하게
+	 * 워크스페이스 스코핑으로 조회하며, 다른 워크스페이스의 projectId는 404(ProjectNotFoundException)로 처리한다.
+	 */
+	@Transactional(readOnly = true)
+	public ProjectResponse getProject(AuthenticatedUser principal, Long projectId) {
+		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+				.orElseThrow(ProjectNotFoundException::new);
+		return ProjectResponse.from(project);
+	}
+
+	/**
 	 * FR-301 담당자 선택용 선행 요구사항(GET /api/projects/{projectId}/members): 프로젝트별 멤버십
 	 * 테이블이 없으므로 project가 속한 workspace의 모든 User를 "멤버"로 반환한다. 조회 전용이라 role
 	 * 제한 없이 인증된 누구나(GUEST 포함) 호출 가능하다(컨트롤러에 @PreAuthorize 없음).
