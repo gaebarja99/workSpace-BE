@@ -53,7 +53,7 @@ class MemberServiceTest {
 		when(userRepository.findByIdAndWorkspaceId(1L, 10L)).thenReturn(java.util.Optional.of(admin));
 		when(userRepository.countByWorkspaceIdAndRole(10L, Role.ADMIN)).thenReturn(1L);
 
-		assertThatThrownBy(() -> memberService.changeRole(adminPrincipal, 1L, Role.MEMBER))
+		assertThatThrownBy(() -> memberService.changeRole(adminPrincipal, 1L, Role.STAFF))
 				.isInstanceOf(LastAdminDemotionException.class);
 	}
 
@@ -94,7 +94,7 @@ class MemberServiceTest {
 	void 대상_구성원이_없으면_예외() {
 		when(userRepository.findByIdAndWorkspaceId(999L, 10L)).thenReturn(java.util.Optional.empty());
 
-		assertThatThrownBy(() -> memberService.changeRole(adminPrincipal, 999L, Role.MEMBER))
+		assertThatThrownBy(() -> memberService.changeRole(adminPrincipal, 999L, Role.STAFF))
 				.isInstanceOf(MemberNotFoundException.class);
 	}
 

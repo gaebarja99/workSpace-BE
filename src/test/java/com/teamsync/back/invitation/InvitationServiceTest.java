@@ -67,7 +67,7 @@ class InvitationServiceTest {
 
 	@Test
 	void 이미_워크스페이스_구성원인_이메일이면_예외() {
-		var request = new InvitationCreateRequest("member@growtech.io", Role.MEMBER);
+		var request = new InvitationCreateRequest("member@growtech.io", Role.STAFF);
 		when(userRepository.existsByEmail("member@growtech.io")).thenReturn(true);
 
 		assertThatThrownBy(() -> invitationService.createInvitation(adminPrincipal, request))
@@ -76,10 +76,10 @@ class InvitationServiceTest {
 
 	@Test
 	void 이미_PENDING_초대가_존재하면_예외() throws Exception {
-		var request = new InvitationCreateRequest("newbie@growtech.io", Role.MEMBER);
+		var request = new InvitationCreateRequest("newbie@growtech.io", Role.STAFF);
 		when(userRepository.existsByEmail("newbie@growtech.io")).thenReturn(false);
 
-		Invitation existing = new Invitation(null, "newbie@growtech.io", Role.MEMBER, "existing-token", null,
+		Invitation existing = new Invitation(null, "newbie@growtech.io", Role.STAFF, "existing-token", null,
 				LocalDateTime.now().plusDays(7));
 		when(invitationRepository.findByWorkspaceIdAndEmailAndStatus(10L, "newbie@growtech.io",
 				InvitationStatus.PENDING)).thenReturn(java.util.Optional.of(existing));

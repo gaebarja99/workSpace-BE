@@ -61,12 +61,12 @@ class WeeklyReportServiceTest {
 				categoryKeywordRepository, userRepository);
 		workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
-		memberPrincipal = new AuthenticatedUser(5L, 10L, "member@growtech.io", Role.MEMBER);
+		memberPrincipal = new AuthenticatedUser(5L, 10L, "member@growtech.io", Role.STAFF);
 	}
 
 	@Test
 	void replaceEntries는_대분류_중분류_타입이_바뀌면_예외() throws Exception {
-		User user = newUser("멤버", Role.MEMBER);
+		User user = newUser("멤버", Role.STAFF);
 		setId(user, 5L);
 		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
 		setId(report, 900L);
@@ -87,7 +87,7 @@ class WeeklyReportServiceTest {
 
 	@Test
 	void replaceEntries는_비활성_카테고리면_예외() throws Exception {
-		User user = newUser("멤버", Role.MEMBER);
+		User user = newUser("멤버", Role.STAFF);
 		setId(user, 5L);
 		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
 		setId(report, 900L);
@@ -105,7 +105,7 @@ class WeeklyReportServiceTest {
 
 	@Test
 	void replaceEntries는_정상_요청이면_기존_행을_지우고_새로_생성한다() throws Exception {
-		User user = newUser("멤버", Role.MEMBER);
+		User user = newUser("멤버", Role.STAFF);
 		setId(user, 5L);
 		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
 		setId(report, 900L);
@@ -134,7 +134,7 @@ class WeeklyReportServiceTest {
 
 	@Test
 	void 이미_제출된_보고서는_수정_불가() throws Exception {
-		User user = newUser("멤버", Role.MEMBER);
+		User user = newUser("멤버", Role.STAFF);
 		setId(user, 5L);
 		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
 		report.submit();
@@ -151,7 +151,7 @@ class WeeklyReportServiceTest {
 
 	@Test
 	void 이미_제출된_보고서를_다시_제출하면_예외() throws Exception {
-		User user = newUser("멤버", Role.MEMBER);
+		User user = newUser("멤버", Role.STAFF);
 		setId(user, 5L);
 		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
 		report.submit();
@@ -165,9 +165,9 @@ class WeeklyReportServiceTest {
 	@Test
 	void 팀_대시보드는_제출_인원수를_센다() throws Exception {
 		AuthenticatedUser leaderPrincipal = new AuthenticatedUser(1L, 10L, "leader@growtech.io", Role.LEADER);
-		User submitted = newUser("제출자", Role.MEMBER);
+		User submitted = newUser("제출자", Role.STAFF);
 		setId(submitted, 5L);
-		User notSubmitted = newUser("미제출자", Role.MEMBER);
+		User notSubmitted = newUser("미제출자", Role.STAFF);
 		setId(notSubmitted, 6L);
 		when(userRepository.findAllByWorkspaceIdOrderByNameAsc(10L)).thenReturn(List.of(submitted, notSubmitted));
 
@@ -189,7 +189,7 @@ class WeeklyReportServiceTest {
 	@Test
 	void 대표_뷰는_대분류_기준으로_그룹핑된다() throws Exception {
 		AuthenticatedUser adminPrincipal = new AuthenticatedUser(1L, 10L, "admin@growtech.io", Role.ADMIN);
-		User member = newUser("멤버", Role.MEMBER);
+		User member = newUser("멤버", Role.STAFF);
 		setId(member, 5L);
 		when(userRepository.findAllByWorkspaceIdOrderByNameAsc(10L)).thenReturn(List.of(member));
 
@@ -219,14 +219,14 @@ class WeeklyReportServiceTest {
 
 	@Test
 	void 개인_보고서_내보내기_본인이면_허용() throws Exception {
-		User owner = newUser("작성자", Role.MEMBER);
+		User owner = newUser("작성자", Role.STAFF);
 		setId(owner, 5L);
 		WeeklyReport report = new WeeklyReport(owner, WEEK_START, WEEK_END);
 		setId(report, 900L);
 		when(weeklyReportRepository.findById(900L)).thenReturn(Optional.of(report));
 		when(weeklyReportEntryRepository.findAllByReport_IdOrderBySectionAscOrderIndexAsc(900L)).thenReturn(List.of());
 
-		AuthenticatedUser ownerPrincipal = new AuthenticatedUser(5L, 10L, "author@growtech.io", Role.MEMBER);
+		AuthenticatedUser ownerPrincipal = new AuthenticatedUser(5L, 10L, "author@growtech.io", Role.STAFF);
 		WeeklyReportExportView view = weeklyReportService.getReportForExport(ownerPrincipal, 900L);
 
 		assertThat(view.authorName()).isEqualTo("작성자");
@@ -235,7 +235,7 @@ class WeeklyReportServiceTest {
 
 	@Test
 	void 개인_보고서_내보내기_같은_워크스페이스_LEADER는_타인_보고서도_허용() throws Exception {
-		User owner = newUser("작성자", Role.MEMBER);
+		User owner = newUser("작성자", Role.STAFF);
 		setId(owner, 5L);
 		WeeklyReport report = new WeeklyReport(owner, WEEK_START, WEEK_END);
 		setId(report, 900L);
@@ -250,13 +250,13 @@ class WeeklyReportServiceTest {
 
 	@Test
 	void 개인_보고서_내보내기_타인_보고서를_일반_멤버가_요청하면_404() throws Exception {
-		User owner = newUser("작성자", Role.MEMBER);
+		User owner = newUser("작성자", Role.STAFF);
 		setId(owner, 5L);
 		WeeklyReport report = new WeeklyReport(owner, WEEK_START, WEEK_END);
 		setId(report, 900L);
 		when(weeklyReportRepository.findById(900L)).thenReturn(Optional.of(report));
 
-		AuthenticatedUser otherMemberPrincipal = new AuthenticatedUser(6L, 10L, "other@growtech.io", Role.MEMBER);
+		AuthenticatedUser otherMemberPrincipal = new AuthenticatedUser(6L, 10L, "other@growtech.io", Role.STAFF);
 
 		assertThatThrownBy(() -> weeklyReportService.getReportForExport(otherMemberPrincipal, 900L))
 				.isInstanceOf(WeeklyReportNotFoundException.class);
@@ -266,7 +266,7 @@ class WeeklyReportServiceTest {
 	void 개인_보고서_내보내기_다른_워크스페이스면_404() throws Exception {
 		Workspace otherWorkspace = new Workspace("다른회사", "other.io");
 		setId(otherWorkspace, 20L);
-		User owner = new User(otherWorkspace, "author@other.io", "hash", "작성자", Role.MEMBER);
+		User owner = new User(otherWorkspace, "author@other.io", "hash", "작성자", Role.STAFF);
 		setId(owner, 5L);
 		WeeklyReport report = new WeeklyReport(owner, WEEK_START, WEEK_END);
 		setId(report, 901L);

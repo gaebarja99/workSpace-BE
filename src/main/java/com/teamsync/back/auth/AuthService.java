@@ -50,8 +50,9 @@ public class AuthService {
 
 		Role role;
 		if (workspace != null) {
-			// FR-000: 도메인이 일치하는 워크스페이스가 이미 있으면 자동 합류(멤버로)
-			role = Role.MEMBER;
+			// FR-000: 도메인이 일치하는 워크스페이스가 이미 있으면 자동 합류(세부 직급 정보가 없으므로
+			// 신규 5단계 중 가장 낮은 티어인 사원(STAFF)으로 합류시킨다)
+			role = Role.STAFF;
 		} else {
 			// 새 워크스페이스 생성: 최초 생성자는 관리자(ADMIN)가 된다.
 			if (request.workspaceName() == null || request.workspaceName().isBlank()) {

@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 주간 보고(V23) 대/중분류 표준 코드 테이블 API. 조회/생성/수정/비활성화 모두 GUEST를 제외한 인증된
- * 워크스페이스 사용자(ADMIN/LEADER/MEMBER) 전원 가능하다(관리자 전용 아님 — ReportController의
+ * 워크스페이스 사용자(ADMIN/LEADER/MANAGER/ASSISTANT_MANAGER/STAFF) 전원 가능하다(관리자 전용 아님 — ReportController의
  * reportMembers() 관례와 동일하게 GUEST만 제외).
  */
 @RestController
@@ -36,27 +36,27 @@ public class CategoryKeywordController {
 	}
 
 	@GetMapping
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<List<CategoryKeywordResponse>> list(@RequestParam CategoryType type) {
 		return ResponseEntity.ok(categoryKeywordService.list(type));
 	}
 
 	@PostMapping
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<CategoryKeywordResponse> create(@AuthenticationPrincipal AuthenticatedUser principal,
 			@Valid @RequestBody CategoryKeywordCreateRequest request) {
 		return ResponseEntity.status(HttpStatus.CREATED).body(categoryKeywordService.create(principal, request));
 	}
 
 	@PatchMapping("/{id}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<CategoryKeywordResponse> rename(@PathVariable Long id,
 			@Valid @RequestBody CategoryKeywordUpdateRequest request) {
 		return ResponseEntity.ok(categoryKeywordService.rename(id, request));
 	}
 
 	@DeleteMapping("/{id}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<Void> deactivate(@PathVariable Long id) {
 		categoryKeywordService.deactivate(id);
 		return ResponseEntity.noContent().build();

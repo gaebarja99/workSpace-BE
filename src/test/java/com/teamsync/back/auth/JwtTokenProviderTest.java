@@ -24,7 +24,7 @@ class JwtTokenProviderTest {
 	void generateAccessToken_그리고_검증하면_클레임이_복원된다() throws Exception {
 		Workspace workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
-		User user = new User(workspace, "park.junior@growtech.io", "hashed", "박사원", Role.MEMBER);
+		User user = new User(workspace, "park.junior@growtech.io", "hashed", "박사원", Role.STAFF);
 		setId(user, 1L);
 
 		String token = jwtTokenProvider.generateAccessToken(user);
@@ -37,10 +37,10 @@ class JwtTokenProviderTest {
 		assertThat(principal.userId()).isEqualTo(1L);
 		assertThat(principal.workspaceId()).isEqualTo(10L);
 		assertThat(principal.email()).isEqualTo("park.junior@growtech.io");
-		assertThat(principal.role()).isEqualTo(Role.MEMBER);
+		assertThat(principal.role()).isEqualTo(Role.STAFF);
 		assertThat(authentication.getAuthorities())
 				.extracting(GrantedAuthority::getAuthority)
-				.containsExactly("ROLE_MEMBER");
+				.containsExactly("ROLE_STAFF");
 	}
 
 	@Test

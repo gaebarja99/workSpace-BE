@@ -63,7 +63,7 @@ class TaskDependencyServiceTest {
 		setId(projectAlpha, 100L);
 		projectBeta = new Project(workspace, "베타", "설명", null);
 		setId(projectBeta, 200L);
-		principal = new AuthenticatedUser(1L, 10L, "member@growtech.io", Role.MEMBER);
+		principal = new AuthenticatedUser(1L, 10L, "member@growtech.io", Role.STAFF);
 	}
 
 	@Test
@@ -73,7 +73,7 @@ class TaskDependencyServiceTest {
 		mockTaskLookup(predecessor, successor);
 		when(taskDependencyRepository.existsByPredecessorTask_IdAndSuccessorTask_Id(1L, 2L)).thenReturn(false);
 		when(taskDependencyRepository.findSuccessorTaskIdsByPredecessorTaskId(2L)).thenReturn(List.of());
-		User creator = new User(workspace, "member@growtech.io", "pw", "멤버", Role.MEMBER);
+		User creator = new User(workspace, "member@growtech.io", "pw", "멤버", Role.STAFF);
 		when(userRepository.getReferenceById(1L)).thenReturn(creator);
 		when(taskDependencyRepository.save(any(TaskDependency.class))).thenAnswer(invocation -> {
 			TaskDependency dependency = invocation.getArgument(0);
@@ -177,7 +177,7 @@ class TaskDependencyServiceTest {
 		mockTaskLookupFor(2L, taskB);
 		when(taskDependencyRepository.existsByPredecessorTask_IdAndSuccessorTask_Id(2L, 1L)).thenReturn(false);
 		when(taskDependencyRepository.findSuccessorTaskIdsByPredecessorTaskId(1L)).thenReturn(List.of());
-		User creator = new User(workspace, "member@growtech.io", "pw", "멤버", Role.MEMBER);
+		User creator = new User(workspace, "member@growtech.io", "pw", "멤버", Role.STAFF);
 		when(userRepository.getReferenceById(1L)).thenReturn(creator);
 		when(taskDependencyRepository.save(any(TaskDependency.class))).thenAnswer(invocation -> {
 			TaskDependency dependency = invocation.getArgument(0);

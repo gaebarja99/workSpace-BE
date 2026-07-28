@@ -32,7 +32,7 @@ public class ProjectController {
 	}
 
 	@PostMapping
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')") // 게스트는 프로젝트 생성 불가(FR-002 역할 기반 권한 기초 예시)
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')") // 게스트는 프로젝트 생성 불가(FR-002 역할 기반 권한 기초 예시)
 	public ResponseEntity<ProjectResponse> create(@AuthenticationPrincipal AuthenticatedUser principal,
 			@Valid @RequestBody ProjectCreateRequest request) {
 		return ResponseEntity.status(HttpStatus.CREATED).body(projectService.createProject(principal, request));

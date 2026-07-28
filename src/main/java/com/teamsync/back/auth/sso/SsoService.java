@@ -84,7 +84,7 @@ public class SsoService {
 		AuthProvider authProvider = toAuthProvider(providerName);
 		User user = userRepository.findByEmail(email)
 				.orElseGet(() -> userRepository.save(
-						new User(workspace, email, safeName(info.name(), email), Role.MEMBER, authProvider)));
+						new User(workspace, email, safeName(info.name(), email), Role.STAFF, authProvider)));
 
 		// 구성원 관리(P1): 비활성화(DEACTIVATED)된 계정은 SSO로도 로그인/토큰 발급을 차단한다.
 		if (user.getStatus() == UserStatus.DEACTIVATED) {

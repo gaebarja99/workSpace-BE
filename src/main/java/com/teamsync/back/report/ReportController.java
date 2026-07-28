@@ -20,7 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 주간 보고(V23 재설계) API. project 비종속(/api/reports/... — 더 이상 /api/projects/{projectId}/reports
- * 하위가 아님). 개인 보고서(/me*)는 GUEST를 제외한 ADMIN/LEADER/MEMBER, 팀장 뷰(/team)는 ADMIN/LEADER,
+ * 하위가 아님). 개인 보고서(/me*)는 GUEST를 제외한 ADMIN/LEADER/MANAGER/ASSISTANT_MANAGER/STAFF,
+ * 팀장 뷰(/team)는 ADMIN/LEADER,
  * 대표 뷰(/executive)는 ADMIN만 호출 가능하다.
  */
 @RestController
@@ -34,14 +35,14 @@ public class ReportController {
 	}
 
 	@GetMapping("/me")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<WeeklyReportResponse> getMyReport(@AuthenticationPrincipal AuthenticatedUser principal,
 			@RequestParam(required = false) LocalDate weekStart) {
 		return ResponseEntity.ok(weeklyReportService.getOrCreateMyReport(principal, weekStart));
 	}
 
 	@PutMapping("/me/entries")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<WeeklyReportResponse> replaceMyEntries(@AuthenticationPrincipal AuthenticatedUser principal,
 			@RequestParam(required = false) LocalDate weekStart, @RequestParam EntrySection section,
 			@Valid @RequestBody EntriesReplaceRequest request) {
@@ -49,7 +50,7 @@ public class ReportController {
 	}
 
 	@PostMapping("/me/submit")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<WeeklyReportResponse> submitMyReport(@AuthenticationPrincipal AuthenticatedUser principal,
 			@RequestParam(required = false) LocalDate weekStart) {
 		return ResponseEntity.ok(weeklyReportService.submitMyReport(principal, weekStart));

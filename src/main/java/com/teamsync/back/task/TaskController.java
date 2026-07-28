@@ -30,7 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * FR-101(보드) / FR-102(태스크 카드) API.
  * 조회(GET)는 인증된 워크스페이스 구성원이면 GUEST를 포함해 누구나 가능하고,
- * 생성/수정/삭제는 ProjectController와 동일하게 GUEST를 제외한 ADMIN/LEADER/MEMBER만 가능하다.
+ * 생성/수정/삭제는 ProjectController와 동일하게 GUEST를 제외한
+ * ADMIN/LEADER/MANAGER/ASSISTANT_MANAGER/STAFF만 가능하다.
  */
 @RestController
 public class TaskController {
@@ -44,7 +45,7 @@ public class TaskController {
 	}
 
 	@PostMapping("/api/projects/{projectId}/tasks")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<TaskResponse> create(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long projectId, @Valid @RequestBody TaskCreateRequest request) {
 		return ResponseEntity.status(HttpStatus.CREATED)
@@ -80,14 +81,14 @@ public class TaskController {
 	}
 
 	@PatchMapping("/api/tasks/{taskId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<TaskResponse> update(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long taskId, @Valid @RequestBody TaskUpdateRequest request) {
 		return ResponseEntity.ok(taskService.updateTask(principal, taskId, request));
 	}
 
 	@DeleteMapping("/api/tasks/{taskId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<Void> delete(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long taskId) {
 		taskService.deleteTask(principal, taskId);
@@ -95,7 +96,7 @@ public class TaskController {
 	}
 
 	@PostMapping("/api/tasks/{taskId}/checklist-items")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<ChecklistItemResponse> addChecklistItem(
 			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId,
 			@Valid @RequestBody ChecklistItemCreateRequest request) {
@@ -104,7 +105,7 @@ public class TaskController {
 	}
 
 	@PatchMapping("/api/tasks/{taskId}/checklist-items/{itemId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<ChecklistItemResponse> updateChecklistItem(
 			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId,
 			@PathVariable Long itemId, @Valid @RequestBody ChecklistItemUpdateRequest request) {
@@ -112,7 +113,7 @@ public class TaskController {
 	}
 
 	@DeleteMapping("/api/tasks/{taskId}/checklist-items/{itemId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<Void> deleteChecklistItem(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long taskId, @PathVariable Long itemId) {
 		taskService.deleteChecklistItem(principal, taskId, itemId);
@@ -127,7 +128,7 @@ public class TaskController {
 	}
 
 	@PostMapping("/api/tasks/{taskId}/dependencies")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<TaskDependencyResponse> createDependency(
 			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId,
 			@Valid @RequestBody TaskDependencyCreateRequest request) {
@@ -136,7 +137,7 @@ public class TaskController {
 	}
 
 	@DeleteMapping("/api/tasks/{taskId}/dependencies/{dependencyId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
 	public ResponseEntity<Void> deleteDependency(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long taskId, @PathVariable Long dependencyId) {
 		taskDependencyService.deleteDependency(principal, taskId, dependencyId);

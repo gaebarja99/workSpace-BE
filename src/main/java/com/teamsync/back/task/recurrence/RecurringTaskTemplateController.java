@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * FR-106(반복 태스크 템플릿) API.
  * 조회(GET)는 인증된 워크스페이스 구성원이면 GUEST를 포함해 누구나 가능하고,
  * 생성/수정/삭제는 ADMIN/LEADER만 가능하다(계약 문서 명시 — TaskController의
- * ADMIN/LEADER/MEMBER 조합과 달리 MEMBER는 제외).
+ * ADMIN/LEADER/MANAGER/ASSISTANT_MANAGER/STAFF 조합과 달리 MANAGER/ASSISTANT_MANAGER/STAFF는 제외).
  */
 @RestController
 public class RecurringTaskTemplateController {
