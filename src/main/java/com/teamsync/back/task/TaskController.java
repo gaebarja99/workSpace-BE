@@ -5,9 +5,6 @@ import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
 import com.teamsync.back.task.dto.ChecklistItemResponse;
 import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
 import com.teamsync.back.task.dto.MyTaskResponse;
-import com.teamsync.back.task.dto.TaskActivityResponse;
-import com.teamsync.back.task.dto.TaskCommentRequest;
-import com.teamsync.back.task.dto.TaskCommentResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskDependencyCreateRequest;
 import com.teamsync.back.task.dto.TaskDependencyListResponse;
@@ -120,28 +117,6 @@ public class TaskController {
 			@PathVariable Long taskId, @PathVariable Long itemId) {
 		taskService.deleteChecklistItem(principal, taskId, itemId);
 		return ResponseEntity.noContent().build();
-	}
-
-	// FR-305(US-10): 태스크 댓글.
-	@GetMapping("/api/tasks/{taskId}/comments")
-	public ResponseEntity<List<TaskCommentResponse>> listComments(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long taskId) {
-		return ResponseEntity.ok(taskService.listTaskComments(principal, taskId));
-	}
-
-	@PostMapping("/api/tasks/{taskId}/comments")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MEMBER')")
-	public ResponseEntity<TaskCommentResponse> createComment(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long taskId, @Valid @RequestBody TaskCommentRequest request) {
-		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(taskService.createTaskComment(principal, taskId, request));
-	}
-
-	// FR-105-B(US-01): 태스크 활동 로그. 조회는 인증된 워크스페이스 구성원이면 누구나 가능하다(createdAt 오름차순).
-	@GetMapping("/api/tasks/{taskId}/activities")
-	public ResponseEntity<List<TaskActivityResponse>> listActivities(
-			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId) {
-		return ResponseEntity.ok(taskService.listTaskActivities(principal, taskId));
 	}
 
 	// FR-107(P2, 축소 범위): 태스크 간 선후행 의존관계. 시각화 없이 데이터 모델+CRUD API만 제공한다.

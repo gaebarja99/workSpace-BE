@@ -12,9 +12,6 @@ import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
 import com.teamsync.back.task.dto.ChecklistItemResponse;
 import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
 import com.teamsync.back.task.dto.MyTaskResponse;
-import com.teamsync.back.task.dto.TaskActivityResponse;
-import com.teamsync.back.task.dto.TaskCommentRequest;
-import com.teamsync.back.task.dto.TaskCommentResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskResponse;
 import com.teamsync.back.task.dto.TaskSummaryResponse;
@@ -26,7 +23,6 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,21 +41,13 @@ public class TaskService {
 	private final TaskChecklistItemRepository checklistItemRepository;
 	private final ProjectRepository projectRepository;
 	private final UserRepository userRepository;
-	private final TaskActivityService taskActivityService;
-	private final TaskActivityRepository taskActivityRepository;
-	private final TaskCommentRepository taskCommentRepository;
 
 	public TaskService(TaskRepository taskRepository, TaskChecklistItemRepository checklistItemRepository,
-			ProjectRepository projectRepository, UserRepository userRepository,
-			TaskActivityService taskActivityService, TaskActivityRepository taskActivityRepository,
-			TaskCommentRepository taskCommentRepository) {
+			ProjectRepository projectRepository, UserRepository userRepository) {
 		this.taskRepository = taskRepository;
 		this.checklistItemRepository = checklistItemRepository;
 		this.projectRepository = projectRepository;
 		this.userRepository = userRepository;
-		this.taskActivityService = taskActivityService;
-		this.taskActivityRepository = taskActivityRepository;
-		this.taskCommentRepository = taskCommentRepository;
 	}
 
 	@Transactional
@@ -80,8 +68,6 @@ public class TaskService {
 				assignees);
 
 		Task savedTask = taskRepository.save(task);
-		// FR-105-B: 태스크 생성 활동 기록(actor=생성자).
-		taskActivityService.recordCreated(savedTask, createdBy);
 		return TaskResponse.from(savedTask);
 	}
 
@@ -135,12 +121,6 @@ public class TaskService {
 	@Transactional
 	public TaskResponse updateTask(AuthenticatedUser principal, Long taskId, TaskUpdateRequest request) {
 		Task task = getTaskInWorkspace(principal, taskId);
-		// FR-105-B를 위해 변경 전 상태/담당자를 먼저 기억해둔다(도메인 메서드가 이전 값을
-		// 남기지 않으므로, diff는 서비스 계층에서 변경 직전에 스냅샷을 떠 계산해야 한다).
-		TaskStatus previousStatus = task.getStatus();
-		Set<Long> previousAssigneeIds = task.getAssignees().stream()
-				.map(User::getId)
-				.collect(Collectors.toSet());
 
 		if (request.title() != null) {
 			String trimmed = request.title().trim();
@@ -157,11 +137,6 @@ public class TaskService {
 		}
 		if (request.status() != null) {
 			task.changeStatus(request.status());
-			if (request.status() != previousStatus) {
-				// FR-105-B: 상태 변경 활동 기록(detail 예: "진행 중 → 검토").
-				taskActivityService.recordStatusChanged(task, previousStatus, request.status(),
-						userRepository.getReferenceById(principal.userId()));
-			}
 		}
 		if (request.startDate() != null) {
 			task.changeStartDate(request.startDate());
@@ -175,12 +150,6 @@ public class TaskService {
 			}
 			Set<User> resolvedAssignees = resolveAssignees(principal, request.assigneeIds());
 			task.changeAssignees(resolvedAssignees);
-			// FR-105-B: 담당자 집합이 실제로 바뀐 경우에만 활동을 기록한다(변경 없는 재지정은 로그 남기지 않음).
-			Set<Long> resolvedAssigneeIds = resolvedAssignees.stream().map(User::getId).collect(Collectors.toSet());
-			if (!resolvedAssigneeIds.equals(previousAssigneeIds)) {
-				taskActivityService.recordAssigneeChanged(task, resolvedAssignees,
-						userRepository.getReferenceById(principal.userId()));
-			}
 		}
 
 		return TaskResponse.from(task);
@@ -231,46 +200,6 @@ public class TaskService {
 		checklistItemRepository.delete(item);
 	}
 
-	// ----- FR-305(US-10): 태스크 댓글 -----
-
-	@Transactional(readOnly = true)
-	public List<TaskCommentResponse> listTaskComments(AuthenticatedUser principal, Long taskId) {
-		getTaskInWorkspace(principal, taskId);
-		return taskCommentRepository.findByTaskIdOrderByCreatedAtAsc(taskId).stream()
-				.map(TaskCommentResponse::from)
-				.toList();
-	}
-
-	@Transactional
-	public TaskCommentResponse createTaskComment(AuthenticatedUser principal, Long taskId,
-			TaskCommentRequest request) {
-		Task task = getTaskInWorkspace(principal, taskId);
-		String content = request.content().trim();
-		if (content.isEmpty()) {
-			throw new InvalidTaskRequestException("댓글 내용은 공백일 수 없습니다.");
-		}
-		User author = userRepository.getReferenceById(principal.userId());
-		// FR-105-A: 언급 대상 중 워크스페이스 소속인 사용자만 남긴다(그 외 id는 무시). content는 원문 그대로 저장.
-		Set<User> mentionedUsers = resolveMentionedUsers(principal, request.mentionedUserIds());
-
-		TaskComment comment = taskCommentRepository.save(new TaskComment(task, author, content, mentionedUsers));
-
-		// FR-105-B: 댓글 작성 활동 기록.
-		taskActivityService.recordCommentAdded(task, author);
-
-		return TaskCommentResponse.from(comment);
-	}
-
-	// ----- FR-105-B(US-01): 태스크 활동 로그 조회 -----
-
-	@Transactional(readOnly = true)
-	public List<TaskActivityResponse> listTaskActivities(AuthenticatedUser principal, Long taskId) {
-		getTaskInWorkspace(principal, taskId);
-		return taskActivityRepository.findByTaskIdOrderByCreatedAtAscIdAsc(taskId).stream()
-				.map(TaskActivityResponse::from)
-				.toList();
-	}
-
 	private Project getProjectInWorkspace(AuthenticatedUser principal, Long projectId) {
 		return projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
 				.orElseThrow(ProjectNotFoundException::new);
@@ -288,18 +217,5 @@ public class TaskService {
 			throw new InvalidAssigneeException();
 		}
 		return new LinkedHashSet<>(users);
-	}
-
-	/**
-	 * FR-105-A: 댓글 mentionedUserIds 중 요청자의 워크스페이스에 실제로 속한 사용자만 남긴다(그 외 id는 조용히 무시).
-	 * 담당자 해석(resolveAssignees)과 달리 존재하지 않는 id가 섞여도 예외를 던지지 않는다(멘션은 best-effort).
-	 */
-	private Set<User> resolveMentionedUsers(AuthenticatedUser principal, List<Long> mentionedUserIds) {
-		if (mentionedUserIds == null || mentionedUserIds.isEmpty()) {
-			return new LinkedHashSet<>();
-		}
-		Set<Long> distinctIds = new LinkedHashSet<>(mentionedUserIds);
-		distinctIds.remove(principal.userId()); // 작성자 자기 자신 멘션은 목록에서 제외
-		return new LinkedHashSet<>(userRepository.findAllByIdInAndWorkspaceId(distinctIds, principal.workspaceId()));
 	}
 }

@@ -2,7 +2,6 @@ package com.teamsync.back.task.recurrence;
 
 import com.teamsync.back.common.exception.RecurringTaskTemplateNotFoundException;
 import com.teamsync.back.task.Task;
-import com.teamsync.back.task.TaskActivityService;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.TaskStatus;
 import java.time.LocalDate;
@@ -29,13 +28,11 @@ public class RecurringTaskGenerationService {
 
 	private final RecurringTaskTemplateRepository recurringTaskTemplateRepository;
 	private final TaskRepository taskRepository;
-	private final TaskActivityService taskActivityService;
 
 	public RecurringTaskGenerationService(RecurringTaskTemplateRepository recurringTaskTemplateRepository,
-			TaskRepository taskRepository, TaskActivityService taskActivityService) {
+			TaskRepository taskRepository) {
 		this.recurringTaskTemplateRepository = recurringTaskTemplateRepository;
 		this.taskRepository = taskRepository;
-		this.taskActivityService = taskActivityService;
 	}
 
 	/**
@@ -59,10 +56,7 @@ public class RecurringTaskGenerationService {
 				template.getCreatedBy(),
 				template.getAssignees(),
 				template);
-		Task savedTask = taskRepository.save(task);
-
-		// 계약 문서 지시대로 기존 활동로그 트리거는 그대로 재사용한다(일관성 유지).
-		taskActivityService.recordCreated(savedTask, template.getCreatedBy());
+		taskRepository.save(task);
 
 		template.markGenerated(today);
 	}
