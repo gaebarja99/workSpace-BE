@@ -15,6 +15,8 @@ import com.teamsync.back.report.dto.TeamDashboardResponse;
 import com.teamsync.back.report.dto.TeamWeeklyReportExportView;
 import com.teamsync.back.report.dto.WeeklyReportExportView;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
+import com.teamsync.back.project.Project;
+import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
@@ -48,6 +50,9 @@ class WeeklyReportServiceTest {
 	@Mock
 	private UserRepository userRepository;
 
+	@Mock
+	private ProjectRepository projectRepository;
+
 	private WeeklyReportService weeklyReportService;
 	private Workspace workspace;
 	private AuthenticatedUser memberPrincipal;
@@ -58,14 +63,14 @@ class WeeklyReportServiceTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		weeklyReportService = new WeeklyReportService(weeklyReportRepository, weeklyReportEntryRepository,
-				categoryKeywordRepository, userRepository);
+				categoryKeywordRepository, userRepository, projectRepository);
 		workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
 		memberPrincipal = new AuthenticatedUser(5L, 10L, "member@growtech.io", Role.STAFF);
 	}
 
 	@Test
-	void replaceEntries는_대분류_중분류_타입이_바뀌면_예외() throws Exception {
+	void replaceEntries는_중분류_타입이_바뀌면_예외() throws Exception {
 		User user = newUser("멤버", Role.STAFF);
 		setId(user, 5L);
 		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
@@ -73,12 +78,16 @@ class WeeklyReportServiceTest {
 		when(userRepository.getReferenceById(5L)).thenReturn(user);
 		when(weeklyReportRepository.findByUser_IdAndWeekStart(5L, WEEK_START)).thenReturn(Optional.of(report));
 
-		CategoryKeyword middleAsMajor = newCategory(CategoryType.MIDDLE, "개발/구현");
-		setId(middleAsMajor, 1L);
-		when(categoryKeywordRepository.findById(1L)).thenReturn(Optional.of(middleAsMajor));
+		Project project = newProject("rCMS (당원관리)");
+		setId(project, 1L);
+		when(projectRepository.findByIdAndWorkspaceId(1L, 10L)).thenReturn(Optional.of(project));
+
+		CategoryKeyword majorTypeAsMiddle = newCategory(CategoryType.MAJOR, "rCMS (당원관리)");
+		setId(majorTypeAsMiddle, 2L);
+		when(categoryKeywordRepository.findById(2L)).thenReturn(Optional.of(majorTypeAsMiddle));
 
 		EntriesReplaceRequest request = new EntriesReplaceRequest(
-				List.of(new EntryUpsertRequest(1L, 1L, "소분류", "상세", 50)));
+				List.of(new EntryUpsertRequest(1L, 2L, "소분류", "상세", 50)));
 
 		assertThatThrownBy(() -> weeklyReportService.replaceEntries(memberPrincipal, WEEK_START,
 				EntrySection.THIS_WEEK, request))
@@ -86,14 +95,14 @@ class WeeklyReportServiceTest {
 	}
 
 	@Test
-	void replaceEntries는_비활성_카테고리면_예외() throws Exception {
+	void replaceEntries는_워크스페이스에_속하지_않는_프로젝트면_예외() throws Exception {
 		User user = newUser("멤버", Role.STAFF);
 		setId(user, 5L);
 		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
 		setId(report, 900L);
 		when(userRepository.getReferenceById(5L)).thenReturn(user);
 		when(weeklyReportRepository.findByUser_IdAndWeekStart(5L, WEEK_START)).thenReturn(Optional.of(report));
-		when(categoryKeywordRepository.findById(1L)).thenReturn(Optional.empty());
+		when(projectRepository.findByIdAndWorkspaceId(1L, 10L)).thenReturn(Optional.empty());
 
 		EntriesReplaceRequest request = new EntriesReplaceRequest(
 				List.of(new EntryUpsertRequest(1L, 2L, "소분류", "상세", 50)));
@@ -112,11 +121,11 @@ class WeeklyReportServiceTest {
 		when(userRepository.getReferenceById(5L)).thenReturn(user);
 		when(weeklyReportRepository.findByUser_IdAndWeekStart(5L, WEEK_START)).thenReturn(Optional.of(report));
 
-		CategoryKeyword major = newCategory(CategoryType.MAJOR, "rCMS (당원관리)");
-		setId(major, 1L);
+		Project project = newProject("rCMS (당원관리)");
+		setId(project, 1L);
 		CategoryKeyword middle = newCategory(CategoryType.MIDDLE, "개발/구현");
 		setId(middle, 2L);
-		when(categoryKeywordRepository.findById(1L)).thenReturn(Optional.of(major));
+		when(projectRepository.findByIdAndWorkspaceId(1L, 10L)).thenReturn(Optional.of(project));
 		when(categoryKeywordRepository.findById(2L)).thenReturn(Optional.of(middle));
 		when(weeklyReportEntryRepository.findAllByReport_IdOrderBySectionAscOrderIndexAsc(900L)).thenReturn(List.of());
 
@@ -198,11 +207,11 @@ class WeeklyReportServiceTest {
 		when(weeklyReportRepository.findAllByUser_IdInAndWeekStart(List.of(5L), WEEK_START))
 				.thenReturn(List.of(report));
 
-		CategoryKeyword major = newCategory(CategoryType.MAJOR, "rCMS (당원관리)");
-		setId(major, 1L);
+		Project project = newProject("rCMS (당원관리)");
+		setId(project, 1L);
 		CategoryKeyword middle = newCategory(CategoryType.MIDDLE, "개발/구현");
 		setId(middle, 2L);
-		WeeklyReportEntry entry = new WeeklyReportEntry(report, EntrySection.THIS_WEEK, major, middle, "소분류",
+		WeeklyReportEntry entry = new WeeklyReportEntry(report, EntrySection.THIS_WEEK, project, middle, "소분류",
 				"상세", 50, 0);
 		when(weeklyReportEntryRepository.findAllByReport_IdInOrderBySectionAscOrderIndexAsc(List.of(900L)))
 				.thenReturn(List.of(entry));
@@ -210,7 +219,7 @@ class WeeklyReportServiceTest {
 		ExecutiveDashboardResponse response = weeklyReportService.getExecutiveDashboard(adminPrincipal, WEEK_START);
 
 		assertThat(response.categories()).hasSize(1);
-		assertThat(response.categories().get(0).majorCategoryName()).isEqualTo("rCMS (당원관리)");
+		assertThat(response.categories().get(0).projectName()).isEqualTo("rCMS (당원관리)");
 		assertThat(response.categories().get(0).members()).hasSize(1);
 		assertThat(response.categories().get(0).members().get(0).thisWeekEntries()).hasSize(1);
 	}
@@ -295,6 +304,10 @@ class WeeklyReportServiceTest {
 
 	private CategoryKeyword newCategory(CategoryType type, String name) {
 		return new CategoryKeyword(type, name, 0, null);
+	}
+
+	private Project newProject(String name) {
+		return new Project(workspace, name, null, null);
 	}
 
 	private void setId(Object entity, Long id) throws Exception {

@@ -1,6 +1,7 @@
 package com.teamsync.back.report;
 
 import com.teamsync.back.common.BaseTimeEntity;
+import com.teamsync.back.project.Project;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,9 +20,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 주간 보고서(V23) 한 행: 대분류/중분류(표준 코드, {@link CategoryKeyword}) + 소분류/상세업무(자유
- * 텍스트) + 달성율(0~100). {@link WeeklyReportService#replaceEntries}가 section 단위로 기존 행을
- * 통째로 지우고 요청 리스트로 다시 만드는 방식이라, 이 엔티티는 개별 행 수정 메서드 없이 생성만 한다.
+ * 주간 보고서(V28) 한 행: 대분류(실제 {@link Project} 참조)/중분류(표준 코드, {@link CategoryKeyword})
+ * + 소분류/상세업무(자유 텍스트) + 달성율(0~100). {@link WeeklyReportService#replaceEntries}가 section
+ * 단위로 기존 행을 통째로 지우고 요청 리스트로 다시 만드는 방식이라, 이 엔티티는 개별 행 수정 메서드 없이
+ * 생성만 한다.
  */
 @Getter
 @Entity
@@ -42,8 +44,8 @@ public class WeeklyReportEntry extends BaseTimeEntity {
 	private EntrySection section;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "major_category_id", nullable = false)
-	private CategoryKeyword majorCategory;
+	@JoinColumn(name = "project_id", nullable = false)
+	private Project project;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "middle_category_id", nullable = false)
@@ -62,11 +64,11 @@ public class WeeklyReportEntry extends BaseTimeEntity {
 	@Column(name = "order_index", nullable = false)
 	private int orderIndex;
 
-	public WeeklyReportEntry(WeeklyReport report, EntrySection section, CategoryKeyword majorCategory,
+	public WeeklyReportEntry(WeeklyReport report, EntrySection section, Project project,
 			CategoryKeyword middleCategory, String minorCategory, String detail, int ratePercent, int orderIndex) {
 		this.report = report;
 		this.section = section;
-		this.majorCategory = majorCategory;
+		this.project = project;
 		this.middleCategory = middleCategory;
 		this.minorCategory = minorCategory != null ? minorCategory : "";
 		this.detail = detail != null ? detail : "";

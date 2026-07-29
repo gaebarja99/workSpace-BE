@@ -151,7 +151,7 @@ final class ReportExportHtmlBuilder {
 	}
 
 	private static String entryLabel(EntryResponse entry) {
-		return entry.majorCategoryName() + " / " + entry.middleCategoryName()
+		return entry.projectName() + " / " + entry.middleCategoryName()
 				+ (hasText(entry.minorCategory()) ? " - " + entry.minorCategory() : "")
 				+ " (" + entry.ratePercent() + "%)";
 	}
@@ -165,7 +165,7 @@ final class ReportExportHtmlBuilder {
 		StringBuilder sb = new StringBuilder("<table><thead><tr><th>대분류</th><th>중분류</th><th>소분류</th>"
 				+ "<th>상세업무</th><th>달성율</th></tr></thead><tbody>");
 		for (EntryResponse e : items) {
-			sb.append("<tr><td>").append(escape(e.majorCategoryName())).append("</td><td>")
+			sb.append("<tr><td>").append(escape(e.projectName())).append("</td><td>")
 					.append(escape(e.middleCategoryName())).append("</td><td>").append(escape(e.minorCategory()))
 					.append("</td><td>").append(nl2br(escape(e.detail()))).append("</td><td>")
 					.append(e.ratePercent()).append("%</td></tr>");

@@ -8,8 +8,8 @@ import com.teamsync.back.report.WeeklyReportEntry;
  */
 public record EntryResponse(
 		Long id,
-		Long majorCategoryId,
-		String majorCategoryName,
+		Long projectId,
+		String projectName,
 		Long middleCategoryId,
 		String middleCategoryName,
 		String minorCategory,
@@ -20,7 +20,7 @@ public record EntryResponse(
 	public static EntryResponse from(WeeklyReportEntry entry) {
 		return new EntryResponse(
 				entry.getId(),
-				entry.getMajorCategory().getId(), entry.getMajorCategory().getName(),
+				entry.getProject().getId(), entry.getProject().getName(),
 				entry.getMiddleCategory().getId(), entry.getMiddleCategory().getName(),
 				entry.getMinorCategory(), entry.getDetail(), entry.getRatePercent(), entry.getOrderIndex());
 	}

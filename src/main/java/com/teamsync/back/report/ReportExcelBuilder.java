@@ -232,7 +232,7 @@ final class ReportExcelBuilder {
 
 		Row row = sheet.createRow(rowIndex);
 		setNumericCell(row, 0, no, styles.projectMerged);
-		setCell(row, 1, category.majorCategoryName(), styles.projectMerged);
+		setCell(row, 1, category.projectName(), styles.projectMerged);
 		setCell(row, 2, participantsLabel, styles.projectMerged);
 
 		int gridStart = EXECUTIVE_FIXED_COLUMNS;
@@ -281,7 +281,7 @@ final class ReportExcelBuilder {
 			zebra = !zebra;
 
 			EntryResponse category = pair.thisWeek() != null ? pair.thisWeek() : pair.nextWeek();
-			setCell(row, 0, category.majorCategoryName(), rowStyle);
+			setCell(row, 0, category.projectName(), rowStyle);
 			setCell(row, 1, category.middleCategoryName(), rowStyle);
 			setCell(row, 2, category.minorCategory(), rowStyle);
 
@@ -334,7 +334,7 @@ final class ReportExcelBuilder {
 	}
 
 	private static boolean sameCategory(EntryResponse a, EntryResponse b) {
-		return Objects.equals(a.majorCategoryId(), b.majorCategoryId())
+		return Objects.equals(a.projectId(), b.projectId())
 				&& Objects.equals(a.middleCategoryId(), b.middleCategoryId())
 				&& Objects.equals(a.minorCategory(), b.minorCategory());
 	}

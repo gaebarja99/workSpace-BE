@@ -17,6 +17,8 @@ import com.teamsync.back.report.dto.TeamMemberReportEntries;
 import com.teamsync.back.report.dto.TeamWeeklyReportExportView;
 import com.teamsync.back.report.dto.WeeklyReportExportView;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
+import com.teamsync.back.project.Project;
+import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
@@ -51,14 +53,17 @@ public class WeeklyReportService {
 	private final WeeklyReportEntryRepository weeklyReportEntryRepository;
 	private final CategoryKeywordRepository categoryKeywordRepository;
 	private final UserRepository userRepository;
+	private final ProjectRepository projectRepository;
 
 	public WeeklyReportService(WeeklyReportRepository weeklyReportRepository,
 			WeeklyReportEntryRepository weeklyReportEntryRepository,
-			CategoryKeywordRepository categoryKeywordRepository, UserRepository userRepository) {
+			CategoryKeywordRepository categoryKeywordRepository, UserRepository userRepository,
+			ProjectRepository projectRepository) {
 		this.weeklyReportRepository = weeklyReportRepository;
 		this.weeklyReportEntryRepository = weeklyReportEntryRepository;
 		this.categoryKeywordRepository = categoryKeywordRepository;
 		this.userRepository = userRepository;
+		this.projectRepository = projectRepository;
 	}
 
 	// ----- 개인 보고서 -----
@@ -89,9 +94,9 @@ public class WeeklyReportService {
 		List<WeeklyReportEntry> newEntries = new ArrayList<>();
 		int orderIndex = 0;
 		for (EntryUpsertRequest entryRequest : request.entries()) {
-			CategoryKeyword major = getActiveCategory(entryRequest.majorCategoryId(), CategoryType.MAJOR);
+			Project project = getProjectInWorkspace(entryRequest.projectId(), principal.workspaceId());
 			CategoryKeyword middle = getActiveCategory(entryRequest.middleCategoryId(), CategoryType.MIDDLE);
-			newEntries.add(new WeeklyReportEntry(report, section, major, middle, entryRequest.minorCategory(),
+			newEntries.add(new WeeklyReportEntry(report, section, project, middle, entryRequest.minorCategory(),
 					entryRequest.detail(), entryRequest.ratePercent(), orderIndex++));
 		}
 
@@ -151,9 +156,9 @@ public class WeeklyReportService {
 	// ----- 대표 뷰 -----
 
 	/**
-	 * 전 인원의 entries를 majorCategory(대분류=프로젝트) 기준으로 그룹핑한다. 해당 대분류에 entry가
-	 * 있는 멤버만 포함하고(entry 없는 조합은 생략), 그룹 안 각 멤버의 thisWeekEntries/nextWeekEntries는
-	 * 그 대분류에 속한 항목만 필터링된 목록이다(멤버 전체 항목이 아님).
+	 * 전 인원의 entries를 project(대분류) 기준으로 그룹핑한다. 해당 프로젝트에 entry가 있는 멤버만
+	 * 포함하고(entry 없는 조합은 생략), 그룹 안 각 멤버의 thisWeekEntries/nextWeekEntries는 그
+	 * 프로젝트에 속한 항목만 필터링된 목록이다(멤버 전체 항목이 아님).
 	 */
 	@Transactional(readOnly = true)
 	public ExecutiveDashboardResponse getExecutiveDashboard(AuthenticatedUser principal, LocalDate weekStartParam) {
@@ -167,7 +172,7 @@ public class WeeklyReportService {
 				.collect(Collectors.toMap(WeeklyReport::getId, r -> r.getUser().getId()));
 		List<WeeklyReportEntry> entries = loadEntries(reports);
 
-		Map<Long, CategoryKeyword> categoryById = new LinkedHashMap<>();
+		Map<Long, Project> projectById = new LinkedHashMap<>();
 		Map<Long, Map<Long, List<EntryResponse>>> thisWeekByCategoryThenUser = new LinkedHashMap<>();
 		Map<Long, Map<Long, List<EntryResponse>>> nextWeekByCategoryThenUser = new LinkedHashMap<>();
 
@@ -176,29 +181,29 @@ public class WeeklyReportService {
 			if (userId == null) {
 				continue;
 			}
-			CategoryKeyword major = entry.getMajorCategory();
-			categoryById.putIfAbsent(major.getId(), major);
+			Project project = entry.getProject();
+			projectById.putIfAbsent(project.getId(), project);
 			Map<Long, Map<Long, List<EntryResponse>>> target = entry.getSection() == EntrySection.THIS_WEEK
 					? thisWeekByCategoryThenUser
 					: nextWeekByCategoryThenUser;
-			target.computeIfAbsent(major.getId(), key -> new LinkedHashMap<>())
+			target.computeIfAbsent(project.getId(), key -> new LinkedHashMap<>())
 					.computeIfAbsent(userId, key -> new ArrayList<>())
 					.add(EntryResponse.from(entry));
 		}
 
-		List<ExecutiveCategoryGroup> categories = categoryById.values().stream()
-				.sorted(Comparator.comparingInt(CategoryKeyword::getOrderIndex).thenComparing(CategoryKeyword::getName))
-				.map(major -> buildCategoryGroup(major, members, thisWeekByCategoryThenUser, nextWeekByCategoryThenUser))
+		List<ExecutiveCategoryGroup> categories = projectById.values().stream()
+				.sorted(Comparator.comparing(Project::getName))
+				.map(project -> buildCategoryGroup(project, members, thisWeekByCategoryThenUser, nextWeekByCategoryThenUser))
 				.toList();
 
 		return new ExecutiveDashboardResponse(weekStart, weekEnd, categories);
 	}
 
-	private ExecutiveCategoryGroup buildCategoryGroup(CategoryKeyword major, List<User> members,
+	private ExecutiveCategoryGroup buildCategoryGroup(Project project, List<User> members,
 			Map<Long, Map<Long, List<EntryResponse>>> thisWeekByCategoryThenUser,
 			Map<Long, Map<Long, List<EntryResponse>>> nextWeekByCategoryThenUser) {
-		Map<Long, List<EntryResponse>> thisWeekByUser = thisWeekByCategoryThenUser.getOrDefault(major.getId(), Map.of());
-		Map<Long, List<EntryResponse>> nextWeekByUser = nextWeekByCategoryThenUser.getOrDefault(major.getId(), Map.of());
+		Map<Long, List<EntryResponse>> thisWeekByUser = thisWeekByCategoryThenUser.getOrDefault(project.getId(), Map.of());
+		Map<Long, List<EntryResponse>> nextWeekByUser = nextWeekByCategoryThenUser.getOrDefault(project.getId(), Map.of());
 		Set<Long> memberIdsInCategory = new LinkedHashSet<>();
 		memberIdsInCategory.addAll(thisWeekByUser.keySet());
 		memberIdsInCategory.addAll(nextWeekByUser.keySet());
@@ -210,7 +215,7 @@ public class WeeklyReportService {
 						nextWeekByUser.getOrDefault(member.getId(), List.of())))
 				.toList();
 
-		return new ExecutiveCategoryGroup(major.getId(), major.getName(), memberEntries);
+		return new ExecutiveCategoryGroup(project.getId(), project.getName(), memberEntries);
 	}
 
 	// ----- FR-409: 보고서 내보내기(PDF/이메일/xlsx) -----
@@ -245,6 +250,12 @@ public class WeeklyReportService {
 	private WeeklyReport getOrCreateEntity(User user, LocalDate weekStart) {
 		return weeklyReportRepository.findByUser_IdAndWeekStart(user.getId(), weekStart)
 				.orElseGet(() -> weeklyReportRepository.save(new WeeklyReport(user, weekStart, weekEndOf(weekStart))));
+	}
+
+	private Project getProjectInWorkspace(Long projectId, Long workspaceId) {
+		return projectRepository.findByIdAndWorkspaceId(projectId, workspaceId)
+				.orElseThrow(() -> new InvalidReportRequestException(
+						"존재하지 않거나 워크스페이스에 속하지 않는 프로젝트입니다: " + projectId));
 	}
 
 	private CategoryKeyword getActiveCategory(Long id, CategoryType expectedType) {
