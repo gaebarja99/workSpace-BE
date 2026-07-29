@@ -81,4 +81,13 @@ public class WeeklyReport extends BaseTimeEntity {
 		this.status = WeeklyReportStatus.SUBMITTED;
 		this.submittedAt = LocalDateTime.now();
 	}
+
+	/**
+	 * SUBMITTED -> DRAFT 재전이("다시 작성하기"). 제출 후 실수를 고칠 수 있도록 원본 불변 원칙을
+	 * 사용자 의지로 되돌리는 유일한 경로다. submittedAt은 지워서 재제출 시 다시 채워지게 한다.
+	 */
+	public void reopen() {
+		this.status = WeeklyReportStatus.DRAFT;
+		this.submittedAt = null;
+	}
 }

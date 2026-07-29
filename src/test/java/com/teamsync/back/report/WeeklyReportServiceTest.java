@@ -172,6 +172,53 @@ class WeeklyReportServiceTest {
 	}
 
 	@Test
+	void 제출된_보고서를_다시_작성하면_DRAFT로_되돌아간다() throws Exception {
+		User user = newUser("멤버", Role.STAFF);
+		setId(user, 5L);
+		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
+		report.submit();
+		setId(report, 900L);
+		when(userRepository.getReferenceById(5L)).thenReturn(user);
+		when(weeklyReportRepository.findByUser_IdAndWeekStart(5L, WEEK_START)).thenReturn(Optional.of(report));
+		when(weeklyReportEntryRepository.findAllByReport_IdOrderBySectionAscOrderIndexAsc(900L)).thenReturn(List.of());
+
+		WeeklyReportResponse response = weeklyReportService.reopenMyReport(memberPrincipal, WEEK_START);
+
+		assertThat(response.status()).isEqualTo(WeeklyReportStatus.DRAFT);
+		assertThat(response.submittedAt()).isNull();
+
+		// 다시 작성 후에는 entries PUT/제출이 다시 허용되어야 한다.
+		Project project = newProject("rCMS (당원관리)");
+		setId(project, 1L);
+		CategoryKeyword middle = newCategory(CategoryType.MIDDLE, "개발/구현");
+		setId(middle, 2L);
+		when(projectRepository.findByIdAndWorkspaceId(1L, 10L)).thenReturn(Optional.of(project));
+		when(categoryKeywordRepository.findById(2L)).thenReturn(Optional.of(middle));
+		EntriesReplaceRequest request = new EntriesReplaceRequest(
+				List.of(new EntryUpsertRequest(1L, 2L, "소분류", "수정된 상세업무", 80)));
+
+		WeeklyReportResponse afterEdit = weeklyReportService.replaceEntries(memberPrincipal, WEEK_START,
+				EntrySection.THIS_WEEK, request);
+
+		assertThat(afterEdit.status()).isEqualTo(WeeklyReportStatus.DRAFT);
+	}
+
+	@Test
+	void 이미_DRAFT인_보고서를_다시_작성해도_그대로_DRAFT() throws Exception {
+		User user = newUser("멤버", Role.STAFF);
+		setId(user, 5L);
+		WeeklyReport report = new WeeklyReport(user, WEEK_START, WEEK_END);
+		setId(report, 900L);
+		when(userRepository.getReferenceById(5L)).thenReturn(user);
+		when(weeklyReportRepository.findByUser_IdAndWeekStart(5L, WEEK_START)).thenReturn(Optional.of(report));
+		when(weeklyReportEntryRepository.findAllByReport_IdOrderBySectionAscOrderIndexAsc(900L)).thenReturn(List.of());
+
+		WeeklyReportResponse response = weeklyReportService.reopenMyReport(memberPrincipal, WEEK_START);
+
+		assertThat(response.status()).isEqualTo(WeeklyReportStatus.DRAFT);
+	}
+
+	@Test
 	void 팀_대시보드는_제출_인원수를_센다() throws Exception {
 		AuthenticatedUser leaderPrincipal = new AuthenticatedUser(1L, 10L, "leader@growtech.io", Role.LEADER);
 		User submitted = newUser("제출자", Role.STAFF);

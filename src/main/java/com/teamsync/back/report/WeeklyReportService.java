@@ -118,6 +118,21 @@ public class WeeklyReportService {
 		return toResponse(report);
 	}
 
+	/**
+	 * "다시 작성하기": 이미 제출한 보고서를 실수로 잘못 냈을 때 사용자가 직접 SUBMITTED -> DRAFT로
+	 * 되돌려 행 추가/수정 후 재제출할 수 있게 한다. 이미 DRAFT면 그대로 두고(idempotent) 응답만 반환한다.
+	 */
+	@Transactional
+	public WeeklyReportResponse reopenMyReport(AuthenticatedUser principal, LocalDate weekStartParam) {
+		LocalDate weekStart = resolveWeekStart(weekStartParam);
+		User user = userRepository.getReferenceById(principal.userId());
+		WeeklyReport report = getOrCreateEntity(user, weekStart);
+		if (report.getStatus() == WeeklyReportStatus.SUBMITTED) {
+			report.reopen();
+		}
+		return toResponse(report);
+	}
+
 	// ----- 팀장 뷰 -----
 
 	@Transactional(readOnly = true)

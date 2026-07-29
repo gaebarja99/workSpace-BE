@@ -56,6 +56,13 @@ public class ReportController {
 		return ResponseEntity.ok(weeklyReportService.submitMyReport(principal, weekStart));
 	}
 
+	@PostMapping("/me/reopen")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
+	public ResponseEntity<WeeklyReportResponse> reopenMyReport(@AuthenticationPrincipal AuthenticatedUser principal,
+			@RequestParam(required = false) LocalDate weekStart) {
+		return ResponseEntity.ok(weeklyReportService.reopenMyReport(principal, weekStart));
+	}
+
 	@GetMapping("/team")
 	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER')")
 	public ResponseEntity<TeamDashboardResponse> getTeamDashboard(@AuthenticationPrincipal AuthenticatedUser principal,
