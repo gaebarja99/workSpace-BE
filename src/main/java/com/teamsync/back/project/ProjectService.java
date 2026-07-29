@@ -13,6 +13,7 @@ import com.teamsync.back.project.dto.ProjectAdminResponse;
 import com.teamsync.back.project.dto.ProjectCreateRequest;
 import com.teamsync.back.project.dto.ProjectResponse;
 import com.teamsync.back.project.dto.ProjectStatsResponse;
+import com.teamsync.back.project.dto.ProjectUpdateRequest;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
 import com.teamsync.back.user.User;
@@ -208,6 +209,17 @@ public class ProjectService {
 		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
 				.orElseThrow(ProjectNotFoundException::new);
 		project.changeStatus(newStatus);
+		long memberCount = projectMemberRepository.countByProject_Id(projectId);
+		return ProjectAdminResponse.of(project, memberCount);
+	}
+
+	/** 프로젝트 관리(관리자, P2): PATCH /api/admin/projects/{id}(이름/설명/마감일 수정). */
+	@Transactional
+	public ProjectAdminResponse updateProject(AuthenticatedUser principal, Long projectId,
+			ProjectUpdateRequest request) {
+		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+				.orElseThrow(ProjectNotFoundException::new);
+		project.update(request.name().trim(), request.description(), request.deadline());
 		long memberCount = projectMemberRepository.countByProject_Id(projectId);
 		return ProjectAdminResponse.of(project, memberCount);
 	}

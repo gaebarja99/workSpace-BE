@@ -74,4 +74,11 @@ public class Project extends BaseTimeEntity {
 	public void changeStatus(ProjectStatus status) {
 		this.status = status;
 	}
+
+	/** 프로젝트 관리(관리자, P2): 관리자가 프로젝트 이름/설명/마감일을 수정한다. */
+	public void update(String name, String description, LocalDate deadline) {
+		this.name = name;
+		this.description = description;
+		this.deadline = deadline;
+	}
 }

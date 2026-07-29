@@ -4,6 +4,7 @@ import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.project.dto.ProjectAdminResponse;
 import com.teamsync.back.project.dto.ProjectStatsResponse;
 import com.teamsync.back.project.dto.ProjectStatusChangeRequest;
+import com.teamsync.back.project.dto.ProjectUpdateRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,13 @@ public class ProjectAdminController {
 	public ResponseEntity<ProjectAdminResponse> changeStatus(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long projectId, @Valid @RequestBody ProjectStatusChangeRequest request) {
 		return ResponseEntity.ok(projectService.changeStatus(principal, projectId, request.status()));
+	}
+
+	@PatchMapping("/{projectId}")
+	@PreAuthorize("hasRole('ADMIN')")
+	public ResponseEntity<ProjectAdminResponse> update(@AuthenticationPrincipal AuthenticatedUser principal,
+			@PathVariable Long projectId, @Valid @RequestBody ProjectUpdateRequest request) {
+		return ResponseEntity.ok(projectService.updateProject(principal, projectId, request));
 	}
 
 	@DeleteMapping("/{projectId}")

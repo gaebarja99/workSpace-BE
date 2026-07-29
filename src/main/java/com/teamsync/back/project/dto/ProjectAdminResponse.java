@@ -1,6 +1,7 @@
 package com.teamsync.back.project.dto;
 
 import com.teamsync.back.project.Project;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -11,6 +12,7 @@ public record ProjectAdminResponse(
 		Long id,
 		String name,
 		String description,
+		LocalDate deadline,
 		String status,
 		CreatedBy createdBy,
 		long memberCount,
@@ -24,6 +26,7 @@ public record ProjectAdminResponse(
 				project.getId(),
 				project.getName(),
 				project.getDescription(),
+				project.getDeadline(),
 				project.getStatus().name(),
 				createdBy,
 				memberCount,
