@@ -65,9 +65,11 @@ public class ProjectService {
 		return ProjectResponse.from(project);
 	}
 
+	/** 로그인 사용자가 실제로 참여 중인(project_members) 프로젝트만 반환한다(워크스페이스 전체 목록이 아님). */
 	@Transactional(readOnly = true)
 	public List<ProjectResponse> listProjects(AuthenticatedUser principal) {
-		return projectRepository.findAllByWorkspaceIdOrderByCreatedAtDesc(principal.workspaceId()).stream()
+		return projectRepository
+				.findAllByWorkspaceIdAndMemberUserId(principal.workspaceId(), principal.userId()).stream()
 				.map(ProjectResponse::from)
 				.toList();
 	}

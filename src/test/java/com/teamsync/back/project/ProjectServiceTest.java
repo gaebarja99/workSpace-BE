@@ -66,6 +66,20 @@ class ProjectServiceTest {
 	}
 
 	@Test
+	void 프로젝트_목록_조회는_로그인_사용자가_참여중인_프로젝트만_반환한다() throws Exception {
+		Project project = newProject("알파", workspace);
+		setId(project, 100L);
+		when(projectRepository.findAllByWorkspaceIdAndMemberUserId(10L, 1L)).thenReturn(List.of(project));
+
+		var result = projectService.listProjects(adminPrincipal);
+
+		assertThat(result).hasSize(1);
+		assertThat(result.get(0).id()).isEqualTo(100L);
+		org.mockito.Mockito.verify(projectRepository, org.mockito.Mockito.never())
+				.findAllByWorkspaceIdOrderByCreatedAtDesc(10L);
+	}
+
+	@Test
 	void 관리자_목록_조회시_memberCount는_project_members_실제_등록_인원수다() throws Exception {
 		Project project = newProject("알파", workspace);
 		setId(project, 100L);
