@@ -80,6 +80,36 @@ class ProjectServiceTest {
 	}
 
 	@Test
+	void 일반_멤버는_목록_조회시_보관된_프로젝트가_제외된다() throws Exception {
+		AuthenticatedUser memberPrincipal = new AuthenticatedUser(2L, 10L, "member@growtech.io", Role.STAFF);
+		Project active = newProject("알파", workspace);
+		setId(active, 100L);
+		Project archived = newProject("베타", workspace);
+		setId(archived, 101L);
+		archived.changeStatus(ProjectStatus.ARCHIVED);
+		when(projectRepository.findAllByWorkspaceIdAndMemberUserId(10L, 2L)).thenReturn(List.of(active, archived));
+
+		var result = projectService.listProjects(memberPrincipal);
+
+		assertThat(result).hasSize(1);
+		assertThat(result.get(0).id()).isEqualTo(100L);
+	}
+
+	@Test
+	void 관리자는_목록_조회시_보관된_프로젝트도_포함된다() throws Exception {
+		Project active = newProject("알파", workspace);
+		setId(active, 100L);
+		Project archived = newProject("베타", workspace);
+		setId(archived, 101L);
+		archived.changeStatus(ProjectStatus.ARCHIVED);
+		when(projectRepository.findAllByWorkspaceIdAndMemberUserId(10L, 1L)).thenReturn(List.of(active, archived));
+
+		var result = projectService.listProjects(adminPrincipal);
+
+		assertThat(result).hasSize(2);
+	}
+
+	@Test
 	void 관리자_목록_조회시_memberCount는_project_members_실제_등록_인원수다() throws Exception {
 		Project project = newProject("알파", workspace);
 		setId(project, 100L);
@@ -262,6 +292,30 @@ class ProjectServiceTest {
 		var result = projectService.getProject(adminPrincipal, 100L);
 
 		assertThat(result.name()).isEqualTo("알파");
+	}
+
+	@Test
+	void 일반_멤버는_보관된_프로젝트_단건_조회시_예외() throws Exception {
+		AuthenticatedUser memberPrincipal = new AuthenticatedUser(2L, 10L, "member@growtech.io", Role.STAFF);
+		Project archived = newProject("베타", workspace);
+		setId(archived, 100L);
+		archived.changeStatus(ProjectStatus.ARCHIVED);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(archived));
+
+		assertThatThrownBy(() -> projectService.getProject(memberPrincipal, 100L))
+				.isInstanceOf(ProjectNotFoundException.class);
+	}
+
+	@Test
+	void 관리자는_보관된_프로젝트도_단건_조회할_수_있다() throws Exception {
+		Project archived = newProject("베타", workspace);
+		setId(archived, 100L);
+		archived.changeStatus(ProjectStatus.ARCHIVED);
+		when(projectRepository.findByIdAndWorkspaceId(100L, 10L)).thenReturn(Optional.of(archived));
+
+		var result = projectService.getProject(adminPrincipal, 100L);
+
+		assertThat(result.name()).isEqualTo("베타");
 	}
 
 	@Test

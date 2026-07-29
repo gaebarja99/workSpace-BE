@@ -16,6 +16,7 @@ import com.teamsync.back.project.dto.ProjectStatsResponse;
 import com.teamsync.back.project.dto.ProjectUpdateRequest;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
+import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
 import com.teamsync.back.workspace.Workspace;
@@ -94,11 +95,17 @@ public class ProjectService {
 				.toList();
 	}
 
-	/** 로그인 사용자가 실제로 참여 중인(project_members) 프로젝트만 반환한다(워크스페이스 전체 목록이 아님). */
+	/**
+	 * 로그인 사용자가 실제로 참여 중인(project_members) 프로젝트만 반환한다(워크스페이스 전체 목록이 아님).
+	 * ADMIN이 아닌 일반 멤버에게는 ARCHIVED(보관됨) 프로젝트를 목록에서 숨긴다(관리자 프로젝트 관리 화면에서만
+	 * 보관 프로젝트를 다룬다). ADMIN은 이 제약 없이 그대로 모두 볼 수 있다.
+	 */
 	@Transactional(readOnly = true)
 	public List<ProjectResponse> listProjects(AuthenticatedUser principal) {
+		boolean isAdmin = principal.role() == Role.ADMIN;
 		return projectRepository
 				.findAllByWorkspaceIdAndMemberUserId(principal.workspaceId(), principal.userId()).stream()
+				.filter(project -> isAdmin || project.getStatus() != ProjectStatus.ARCHIVED)
 				.map(ProjectResponse::from)
 				.toList();
 	}
@@ -106,11 +113,16 @@ public class ProjectService {
 	/**
 	 * FR-4.2 프로젝트 리스트 및 상세(GET /api/projects/{projectId}): listMembers()와 동일하게
 	 * 워크스페이스 스코핑으로 조회하며, 다른 워크스페이스의 projectId는 404(ProjectNotFoundException)로 처리한다.
+	 * ADMIN이 아닌 일반 멤버가 ARCHIVED(보관됨) 프로젝트를 조회하면 존재하지 않는 것처럼 동일하게
+	 * 404(ProjectNotFoundException)로 처리한다(관리자만 보관 프로젝트 상세를 볼 수 있다).
 	 */
 	@Transactional(readOnly = true)
 	public ProjectResponse getProject(AuthenticatedUser principal, Long projectId) {
 		Project project = projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
 				.orElseThrow(ProjectNotFoundException::new);
+		if (project.getStatus() == ProjectStatus.ARCHIVED && principal.role() != Role.ADMIN) {
+			throw new ProjectNotFoundException();
+		}
 		return ProjectResponse.from(project);
 	}
 
