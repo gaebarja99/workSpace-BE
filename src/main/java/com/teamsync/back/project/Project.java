@@ -3,6 +3,7 @@ package com.teamsync.back.project;
 import com.teamsync.back.common.BaseTimeEntity;
 import com.teamsync.back.user.User;
 import com.teamsync.back.workspace.Workspace;
+import java.time.LocalDate;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -44,6 +45,9 @@ public class Project extends BaseTimeEntity {
 	@Column(columnDefinition = "TEXT")
 	private String description;
 
+	@Column
+	private LocalDate deadline;
+
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "created_by")
 	private User createdBy;
@@ -55,9 +59,14 @@ public class Project extends BaseTimeEntity {
 	private ProjectStatus status = ProjectStatus.ACTIVE;
 
 	public Project(Workspace workspace, String name, String description, User createdBy) {
+		this(workspace, name, description, null, createdBy);
+	}
+
+	public Project(Workspace workspace, String name, String description, LocalDate deadline, User createdBy) {
 		this.workspace = workspace;
 		this.name = name;
 		this.description = description;
+		this.deadline = deadline;
 		this.createdBy = createdBy;
 	}
 

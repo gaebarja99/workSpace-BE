@@ -52,6 +52,17 @@ public class ProjectController {
 		return ResponseEntity.ok(projectService.getProject(principal, projectId));
 	}
 
+	// 프로젝트 생성 화면의 "기존 구성원 추가" 후보 목록: 아직 프로젝트가 없으므로 워크스페이스
+	// 전체 사용자(본인 제외)를 반환한다. POST 생성과 동일하게 게스트를 제외한 역할만 호출 가능하다.
+	// {projectId}가 Long 경로변수라 "/members/candidates"라는 리터럴 경로가 더 구체적이므로
+	// Spring이 아래 "/{projectId}/members" 패턴보다 이 매핑을 우선 선택한다.
+	@GetMapping("/members/candidates")
+	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
+	public ResponseEntity<List<MemberSummaryResponse>> listWorkspaceMemberCandidates(
+			@AuthenticationPrincipal AuthenticatedUser principal) {
+		return ResponseEntity.ok(projectService.listWorkspaceMemberCandidates(principal));
+	}
+
 	// FR-301 담당자 선택용 선행 요구사항: 조회 전용이라 GUEST를 포함해 인증된 누구나 호출 가능하다.
 	@GetMapping("/{projectId}/members")
 	public ResponseEntity<List<MemberSummaryResponse>> listMembers(

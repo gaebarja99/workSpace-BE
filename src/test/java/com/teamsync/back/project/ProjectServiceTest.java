@@ -104,12 +104,34 @@ class ProjectServiceTest {
 		when(projectRepository.save(org.mockito.ArgumentMatchers.any(Project.class))).thenReturn(saved);
 
 		projectService.createProject(adminPrincipal,
-				new com.teamsync.back.project.dto.ProjectCreateRequest("알파", "설명"));
+				new com.teamsync.back.project.dto.ProjectCreateRequest("알파", "설명", null, null));
 
 		ArgumentCaptor<ProjectMember> captor = ArgumentCaptor.forClass(ProjectMember.class);
 		org.mockito.Mockito.verify(projectMemberRepository).save(captor.capture());
 		assertThat(captor.getValue().getUser()).isEqualTo(creator);
 		assertThat(captor.getValue().getProject()).isEqualTo(saved);
+	}
+
+	@Test
+	void 프로젝트_생성시_memberIds에_포함된_같은_워크스페이스_사용자도_함께_추가된다() throws Exception {
+		User creator = new User(workspace, "admin@growtech.io", "hash", "관리자", Role.ADMIN);
+		setId(creator, 1L);
+		User invitee = new User(workspace, "member@growtech.io", "hash", "멤버", Role.STAFF);
+		setId(invitee, 2L);
+		when(workspaceRepository.getReferenceById(10L)).thenReturn(workspace);
+		when(userRepository.getReferenceById(1L)).thenReturn(creator);
+		when(userRepository.findByIdAndWorkspaceId(2L, 10L)).thenReturn(Optional.of(invitee));
+		Project saved = newProject("알파", workspace);
+		setId(saved, 100L);
+		when(projectRepository.save(org.mockito.ArgumentMatchers.any(Project.class))).thenReturn(saved);
+
+		projectService.createProject(adminPrincipal,
+				new com.teamsync.back.project.dto.ProjectCreateRequest("알파", "설명", null, List.of(1L, 2L)));
+
+		ArgumentCaptor<ProjectMember> captor = ArgumentCaptor.forClass(ProjectMember.class);
+		org.mockito.Mockito.verify(projectMemberRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+		assertThat(captor.getAllValues()).extracting(ProjectMember::getUser).containsExactlyInAnyOrder(creator,
+				invitee);
 	}
 
 	@Test

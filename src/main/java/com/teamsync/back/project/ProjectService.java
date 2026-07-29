@@ -52,17 +52,45 @@ public class ProjectService {
 		this.projectMemberRepository = projectMemberRepository;
 	}
 
-	/** FR-301 프로젝트 멤버십 테이블(project_members) 도입: 생성자는 자동으로 첫 멤버가 된다. */
+	/**
+	 * FR-301 프로젝트 멤버십 테이블(project_members) 도입: 생성자는 자동으로 첫 멤버가 된다.
+	 * memberIds가 함께 전달되면(생성 화면에서 기존 구성원을 바로 선택한 경우) 같은 워크스페이스
+	 * 소속인 사용자만 걸러 함께 추가한다 — 다른 워크스페이스 id나 생성자 본인 중복은 무시한다.
+	 */
 	@Transactional
 	public ProjectResponse createProject(AuthenticatedUser principal, ProjectCreateRequest request) {
 		Workspace workspace = workspaceRepository.getReferenceById(principal.workspaceId());
 		User createdBy = userRepository.getReferenceById(principal.userId());
 
-		Project project = projectRepository.save(
-				new Project(workspace, request.name().trim(), request.description(), createdBy));
+		Project project = projectRepository.save(new Project(workspace, request.name().trim(),
+				request.description(), request.deadline(), createdBy));
 		projectMemberRepository.save(new ProjectMember(project, createdBy));
 
+		if (request.memberIds() != null) {
+			Set<Long> uniqueMemberIds = Set.copyOf(request.memberIds());
+			for (Long memberId : uniqueMemberIds) {
+				if (memberId == null || memberId.equals(createdBy.getId())) {
+					continue;
+				}
+				userRepository.findByIdAndWorkspaceId(memberId, principal.workspaceId())
+						.ifPresent(user -> projectMemberRepository.save(new ProjectMember(project, user)));
+			}
+		}
+
 		return ProjectResponse.from(project);
+	}
+
+	/**
+	 * 프로젝트 생성 화면의 "기존 구성원 추가" 선택용 워크스페이스 전체 사용자 목록(자기 자신 제외).
+	 * 생성 전이라 project_members가 아직 없으므로 listCandidateMembers와 달리 프로젝트 기준 제외는
+	 * 하지 않는다. POST /api/projects와 동일한 role만 호출 가능하다(컨트롤러 @PreAuthorize).
+	 */
+	@Transactional(readOnly = true)
+	public List<MemberSummaryResponse> listWorkspaceMemberCandidates(AuthenticatedUser principal) {
+		return userRepository.findAllByWorkspaceIdOrderByNameAsc(principal.workspaceId()).stream()
+				.filter(user -> !user.getId().equals(principal.userId()))
+				.map(MemberSummaryResponse::from)
+				.toList();
 	}
 
 	/** 로그인 사용자가 실제로 참여 중인(project_members) 프로젝트만 반환한다(워크스페이스 전체 목록이 아님). */
