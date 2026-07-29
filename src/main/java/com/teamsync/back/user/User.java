@@ -34,8 +34,7 @@ public class User extends BaseTimeEntity {
 	@Column(nullable = false, unique = true, length = 255)
 	private String email;
 
-	// FR-002 SSO: SSO(JIT) 유저는 비밀번호가 없으므로 nullable. LOCAL 유저만 값이 존재한다.
-	@Column(name = "password_hash", length = 255)
+	@Column(name = "password_hash", nullable = false, length = 255)
 	private String passwordHash;
 
 	@Column(nullable = false, length = 100)
@@ -50,7 +49,7 @@ public class User extends BaseTimeEntity {
 	@Column(name = "auth_provider", nullable = false, length = 20)
 	private AuthProvider authProvider;
 
-	// 구성원 관리(P1): 활성/비활성 상태. 신규 가입(회원가입/SSO JIT/초대 수락) 시 항상 ACTIVE로 시작한다.
+	// 구성원 관리(P1): 활성/비활성 상태. 신규 가입(회원가입/초대 수락) 시 항상 ACTIVE로 시작한다.
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private UserStatus status = UserStatus.ACTIVE;
@@ -63,16 +62,6 @@ public class User extends BaseTimeEntity {
 		this.name = name;
 		this.role = role;
 		this.authProvider = AuthProvider.LOCAL;
-	}
-
-	/** FR-002 SSO(JIT 프로비저닝): 비밀번호 없이 생성한다. authProvider는 GOOGLE/MICROSOFT/MOCK. */
-	public User(Workspace workspace, String email, String name, Role role, AuthProvider authProvider) {
-		this.workspace = workspace;
-		this.email = email;
-		this.passwordHash = null;
-		this.name = name;
-		this.role = role;
-		this.authProvider = authProvider;
 	}
 
 	/** 구성원 관리(P1): 관리자가 워크스페이스 멤버의 역할을 변경한다. */

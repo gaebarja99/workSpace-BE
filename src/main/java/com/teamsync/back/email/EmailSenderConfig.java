@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
 
 /**
- * 이메일 발송기 빈 구성. SSO의 실/Mock 전환 선례를 따라 설정 플래그로 실발송/로그 Mock을 갈아끼운다.
+ * 이메일 발송기 빈 구성. 설정 플래그로 실발송/로그 Mock을 갈아끼운다.
  *
  * email.enabled=true 이고 JavaMailSender(spring.mail.* 설정)가 있으면 SMTP 실발송, 그 외에는 로그 Mock.
  * JavaMailSender는 스프링 부트 자동설정이 등록하는 빈이라, 사용자 @Configuration에서 @ConditionalOnBean으로

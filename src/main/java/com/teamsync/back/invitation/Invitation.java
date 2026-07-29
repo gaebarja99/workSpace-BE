@@ -23,7 +23,7 @@ import lombok.NoArgsConstructor;
 /**
  * 구성원 관리(P1): 워크스페이스 관리자가 발급하는 초대. 아직 User가 아닌 이메일 대상으로,
  * 토큰 기반 가입(POST /api/auth/signup/invitation) 경로를 통해서만 User로 전환된다.
- * 기존 도메인 자동가입(AuthService.signup, SsoService.exchange - 이메일 도메인 매칭)과는
+ * 기존 도메인 자동가입(AuthService.signup - 이메일 도메인 매칭)과는
  * 별개의 흐름이다.
  */
 @Getter

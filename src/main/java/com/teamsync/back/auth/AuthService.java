@@ -81,10 +81,7 @@ public class AuthService {
 		User user = userRepository.findByEmail(email)
 				.orElseThrow(InvalidCredentialsException::new);
 
-		// FR-002 SSO: SSO 전용 유저(passwordHash 없음)가 이메일 로그인을 시도하면 NPE 없이
-		// 자격 증명 오류로 처리한다(계정 존재 여부를 노출하지 않기 위해 동일 예외 사용).
-		if (user.getPasswordHash() == null
-				|| !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+		if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
 			throw new InvalidCredentialsException();
 		}
 

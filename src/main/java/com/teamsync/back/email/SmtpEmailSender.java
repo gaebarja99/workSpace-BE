@@ -11,7 +11,7 @@ import org.springframework.util.StringUtils;
 
 /**
  * 이메일 실발송 구현(JavaMailSender 기반). email.enabled=true 이고 SMTP 설정
- * (JavaMailSender 빈)이 있을 때만 활성화된다. SSO의 실/Mock 전환 선례와 동일하게 설정 플래그로 갈아끼운다.
+ * (JavaMailSender 빈)이 있을 때만 활성화된다. 설정 플래그로 실발송/로그 Mock을 갈아끼운다.
  */
 @Slf4j
 public class SmtpEmailSender implements EmailSender {

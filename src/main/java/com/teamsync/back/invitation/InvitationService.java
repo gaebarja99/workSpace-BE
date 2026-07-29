@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 구성원 관리/초대·승인(P1): 관리자 초대 발급/조회/철회, 초대 토큰 공개 조회, 토큰 기반 가입.
- * 기존 도메인 자동가입(AuthService.signup/SsoService.exchange)과는 별개의 경로이며,
+ * 기존 도메인 자동가입(AuthService.signup)과는 별개의 경로이며,
  * 초대 대상은 가입 전까지 User가 아니다(EmailSender의 이메일 문자열 오버로드로 발송).
  */
 @Service
