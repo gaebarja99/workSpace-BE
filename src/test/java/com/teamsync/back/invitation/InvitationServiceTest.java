@@ -5,9 +5,9 @@ import static org.mockito.Mockito.when;
 
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.auth.JwtTokenProvider;
-import com.teamsync.back.common.exception.DuplicateInvitationException;
-import com.teamsync.back.common.exception.DuplicateMemberException;
-import com.teamsync.back.common.exception.InvalidInvitationRoleException;
+import com.teamsync.back.invitation.exception.DuplicateInvitationException;
+import com.teamsync.back.member.exception.DuplicateMemberException;
+import com.teamsync.back.invitation.exception.InvalidInvitationRoleException;
 import com.teamsync.back.email.EmailSender;
 import com.teamsync.back.invitation.dto.InvitationCreateRequest;
 import com.teamsync.back.user.Role;

@@ -2,6 +2,7 @@ package com.teamsync.back.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.teamsync.back.report.export.ReportPdfRenderer;
 import org.junit.jupiter.api.Test;
 
 /**

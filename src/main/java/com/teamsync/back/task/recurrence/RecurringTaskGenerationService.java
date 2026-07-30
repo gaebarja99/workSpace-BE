@@ -1,6 +1,6 @@
 package com.teamsync.back.task.recurrence;
 
-import com.teamsync.back.common.exception.RecurringTaskTemplateNotFoundException;
+import com.teamsync.back.task.recurrence.exception.RecurringTaskTemplateNotFoundException;
 import com.teamsync.back.task.Task;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.TaskStatus;

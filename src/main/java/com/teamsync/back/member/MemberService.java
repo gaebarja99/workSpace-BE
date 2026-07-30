@@ -1,10 +1,10 @@
 package com.teamsync.back.member;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.common.exception.LastActiveAdminException;
-import com.teamsync.back.common.exception.LastAdminDemotionException;
-import com.teamsync.back.common.exception.MemberNotFoundException;
-import com.teamsync.back.common.exception.SelfDeactivationException;
+import com.teamsync.back.member.exception.LastActiveAdminException;
+import com.teamsync.back.member.exception.LastAdminDemotionException;
+import com.teamsync.back.member.exception.MemberNotFoundException;
+import com.teamsync.back.user.exception.SelfDeactivationException;
 import com.teamsync.back.invitation.InvitationRepository;
 import com.teamsync.back.invitation.InvitationStatus;
 import com.teamsync.back.member.dto.MemberResponse;

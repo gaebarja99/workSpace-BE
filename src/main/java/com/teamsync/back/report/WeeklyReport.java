@@ -1,6 +1,7 @@
 package com.teamsync.back.report;
 
 import com.teamsync.back.common.BaseTimeEntity;
+import com.teamsync.back.report.entry.WeeklyReportEntry;
 import com.teamsync.back.user.User;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;

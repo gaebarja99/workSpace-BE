@@ -1,12 +1,12 @@
 package com.teamsync.back.task;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.common.exception.CircularDependencyException;
-import com.teamsync.back.common.exception.CrossProjectDependencyException;
-import com.teamsync.back.common.exception.DuplicateDependencyException;
-import com.teamsync.back.common.exception.SelfDependencyException;
-import com.teamsync.back.common.exception.TaskDependencyNotFoundException;
-import com.teamsync.back.common.exception.TaskNotFoundException;
+import com.teamsync.back.task.exception.CircularDependencyException;
+import com.teamsync.back.task.exception.CrossProjectDependencyException;
+import com.teamsync.back.task.exception.DuplicateDependencyException;
+import com.teamsync.back.task.exception.SelfDependencyException;
+import com.teamsync.back.task.exception.TaskDependencyNotFoundException;
+import com.teamsync.back.task.exception.TaskNotFoundException;
 import com.teamsync.back.task.dto.TaskDependencyCreateRequest;
 import com.teamsync.back.task.dto.TaskDependencyItemResponse;
 import com.teamsync.back.task.dto.TaskDependencyListResponse;

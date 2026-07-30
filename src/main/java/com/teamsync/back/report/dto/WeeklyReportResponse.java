@@ -1,5 +1,7 @@
 package com.teamsync.back.report.dto;
 
+import com.teamsync.back.report.entry.dto.ReportEntries;
+
 import com.teamsync.back.report.WeeklyReportStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

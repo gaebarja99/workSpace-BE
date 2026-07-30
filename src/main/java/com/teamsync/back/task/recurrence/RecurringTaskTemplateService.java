@@ -1,10 +1,10 @@
 package com.teamsync.back.task.recurrence;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.common.exception.InvalidAssigneeException;
-import com.teamsync.back.common.exception.InvalidRecurringTaskTemplateRequestException;
-import com.teamsync.back.common.exception.ProjectNotFoundException;
-import com.teamsync.back.common.exception.RecurringTaskTemplateNotFoundException;
+import com.teamsync.back.task.exception.InvalidAssigneeException;
+import com.teamsync.back.task.recurrence.exception.InvalidRecurringTaskTemplateRequestException;
+import com.teamsync.back.project.exception.ProjectNotFoundException;
+import com.teamsync.back.task.recurrence.exception.RecurringTaskTemplateNotFoundException;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.task.TaskPriority;

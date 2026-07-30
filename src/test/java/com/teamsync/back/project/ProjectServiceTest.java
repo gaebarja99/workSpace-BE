@@ -5,12 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.common.exception.LastProjectMemberException;
-import com.teamsync.back.common.exception.MemberNotFoundException;
-import com.teamsync.back.common.exception.ProjectHasDependenciesException;
-import com.teamsync.back.common.exception.ProjectMemberAlreadyExistsException;
-import com.teamsync.back.common.exception.ProjectNotFoundException;
-import com.teamsync.back.common.exception.RemoveProjectCreatorException;
+import com.teamsync.back.member.exception.LastProjectMemberException;
+import com.teamsync.back.member.exception.MemberNotFoundException;
+import com.teamsync.back.project.exception.ProjectHasDependenciesException;
+import com.teamsync.back.project.exception.ProjectMemberAlreadyExistsException;
+import com.teamsync.back.project.exception.ProjectNotFoundException;
+import com.teamsync.back.project.exception.RemoveProjectCreatorException;
 import com.teamsync.back.task.TaskRepository;
 import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
 import com.teamsync.back.user.Role;

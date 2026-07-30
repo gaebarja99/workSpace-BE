@@ -1,11 +1,11 @@
 package com.teamsync.back.task;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.common.exception.ChecklistItemNotFoundException;
-import com.teamsync.back.common.exception.InvalidAssigneeException;
-import com.teamsync.back.common.exception.InvalidTaskRequestException;
-import com.teamsync.back.common.exception.ProjectNotFoundException;
-import com.teamsync.back.common.exception.TaskNotFoundException;
+import com.teamsync.back.task.exception.ChecklistItemNotFoundException;
+import com.teamsync.back.task.exception.InvalidAssigneeException;
+import com.teamsync.back.task.exception.InvalidTaskRequestException;
+import com.teamsync.back.project.exception.ProjectNotFoundException;
+import com.teamsync.back.task.exception.TaskNotFoundException;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
 import com.teamsync.back.task.dto.ChecklistItemCreateRequest;

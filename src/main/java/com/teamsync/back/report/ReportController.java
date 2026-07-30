@@ -1,9 +1,11 @@
 package com.teamsync.back.report;
 
+import com.teamsync.back.report.entry.EntrySection;
+
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.report.dto.EntriesReplaceRequest;
-import com.teamsync.back.report.dto.ExecutiveDashboardResponse;
-import com.teamsync.back.report.dto.TeamDashboardResponse;
+import com.teamsync.back.report.entry.dto.EntriesReplaceRequest;
+import com.teamsync.back.report.dashboard.dto.ExecutiveDashboardResponse;
+import com.teamsync.back.report.dashboard.dto.TeamDashboardResponse;
 import com.teamsync.back.report.dto.WeeklyReportResponse;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
