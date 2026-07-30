@@ -51,7 +51,7 @@ public class WeeklyReportEntry extends BaseTimeEntity {
 	@JoinColumn(name = "middle_category_id", nullable = false)
 	private CategoryKeyword middleCategory;
 
-	@Column(name = "minor_category", nullable = false)
+	@Column(name = "minor_category", nullable = false, length = 255)
 	private String minorCategory;
 
 	@Column(nullable = false, columnDefinition = "TEXT")
