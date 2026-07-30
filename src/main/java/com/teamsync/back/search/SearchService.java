@@ -1,7 +1,9 @@
 package com.teamsync.back.search;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.common.exception.InvalidSearchRequestException;
+import com.teamsync.back.search.exception.InvalidSearchRequestException;
+import com.teamsync.back.project.ProjectRepository;
+import com.teamsync.back.search.dto.SearchProjectResult;
 import com.teamsync.back.search.dto.SearchResponse;
 import com.teamsync.back.search.dto.SearchTaskResult;
 import com.teamsync.back.search.dto.SearchUserResult;
@@ -13,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-004(워크스페이스 전체 통합 검색): 태스크/사용자를 하나의 검색어로 조회한다.
+ * FR-004(워크스페이스 전체 통합 검색): 태스크/사용자/프로젝트를 하나의 검색어로 조회한다.
  * PRD 5.3이 이상향으로 제시하는 Elasticsearch/OpenSearch는 이번 스코프에 포함하지 않고,
  * 각 Repository의 JPA LIKE(ContainingIgnoreCase 상당) 파생/@Query 조회로 카테고리당 상위 10건만 반환하는
  * MVP로 구현한다(현재 코드베이스에 검색 인프라가 전무하고, PRD 5.1의 "초기부터 과도한 복잡도 지양" 원칙에 따름).
@@ -26,10 +28,13 @@ public class SearchService {
 
 	private final TaskRepository taskRepository;
 	private final UserRepository userRepository;
+	private final ProjectRepository projectRepository;
 
-	public SearchService(TaskRepository taskRepository, UserRepository userRepository) {
+	public SearchService(TaskRepository taskRepository, UserRepository userRepository,
+			ProjectRepository projectRepository) {
 		this.taskRepository = taskRepository;
 		this.userRepository = userRepository;
+		this.projectRepository = projectRepository;
 	}
 
 	@Transactional(readOnly = true)
@@ -49,8 +54,11 @@ public class SearchService {
 		var users = userRepository.searchByWorkspace(workspaceId, keyword, limit).stream()
 				.map(SearchUserResult::from)
 				.toList();
+		var projects = projectRepository.searchByWorkspace(workspaceId, keyword, limit).stream()
+				.map(SearchProjectResult::from)
+				.toList();
 
-		return new SearchResponse(query, tasks, users);
+		return new SearchResponse(query, tasks, users, projects);
 	}
 
 	// LIKE 패턴의 와일드카드 문자(%, _)를 이스케이프해, 사용자가 "%"나 "_"를 검색어로 입력했을 때

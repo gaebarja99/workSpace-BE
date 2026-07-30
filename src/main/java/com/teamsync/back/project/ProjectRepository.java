@@ -2,6 +2,7 @@ package com.teamsync.back.project;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -29,4 +30,12 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 	// FR-407(조직 롤업 대시보드): "팀"=Project 중 ACTIVE(진행중)만 대상으로 하며, projectId 오름차순으로
 	// 응답한다(계약 문서 명시).
 	List<Project> findAllByWorkspaceIdAndStatusOrderByIdAsc(Long workspaceId, ProjectStatus status);
+
+	// FR-004(통합 검색): name에 키워드가 포함된 프로젝트를 워크스페이스 범위로 조회한다.
+	// keyword는 호출부에서 LIKE 와일드카드(%, _)를 이스케이프해 넘겨야 한다(ESCAPE '\' 사용).
+	@Query("SELECT p FROM Project p WHERE p.workspace.id = :workspaceId "
+			+ "AND LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\' "
+			+ "ORDER BY p.createdAt DESC, p.id DESC")
+	List<Project> searchByWorkspace(@Param("workspaceId") Long workspaceId, @Param("keyword") String keyword,
+			Pageable pageable);
 }
