@@ -12,7 +12,6 @@ import com.teamsync.back.project.exception.ProjectMemberAlreadyExistsException;
 import com.teamsync.back.project.exception.ProjectNotFoundException;
 import com.teamsync.back.project.exception.RemoveProjectCreatorException;
 import com.teamsync.back.task.TaskRepository;
-import com.teamsync.back.task.recurrence.RecurringTaskTemplateRepository;
 import com.teamsync.back.user.Role;
 import com.teamsync.back.user.User;
 import com.teamsync.back.user.UserRepository;
@@ -47,9 +46,6 @@ class ProjectServiceTest {
 	private TaskRepository taskRepository;
 
 	@Mock
-	private RecurringTaskTemplateRepository recurringTaskTemplateRepository;
-
-	@Mock
 	private ProjectMemberRepository projectMemberRepository;
 
 	private ProjectService projectService;
@@ -59,7 +55,7 @@ class ProjectServiceTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		projectService = new ProjectService(projectRepository, workspaceRepository, userRepository, taskRepository,
-				recurringTaskTemplateRepository, projectMemberRepository);
+				projectMemberRepository);
 		workspace = new Workspace("그로우테크", "growtech.io");
 		setId(workspace, 10L);
 		adminPrincipal = new AuthenticatedUser(1L, 10L, "admin@growtech.io", Role.ADMIN);
