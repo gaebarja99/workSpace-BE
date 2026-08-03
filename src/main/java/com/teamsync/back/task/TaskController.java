@@ -3,9 +3,6 @@ package com.teamsync.back.task;
 import com.teamsync.back.auth.AuthenticatedUser;
 import com.teamsync.back.task.dto.MyTaskResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
-import com.teamsync.back.task.dto.TaskDependencyCreateRequest;
-import com.teamsync.back.task.dto.TaskDependencyListResponse;
-import com.teamsync.back.task.dto.TaskDependencyResponse;
 import com.teamsync.back.task.dto.TaskResponse;
 import com.teamsync.back.task.dto.TaskSummaryResponse;
 import com.teamsync.back.task.dto.TaskSummaryStatsResponse;
@@ -34,11 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class TaskController {
 
 	private final TaskService taskService;
-	private final TaskDependencyService taskDependencyService;
 
-	public TaskController(TaskService taskService, TaskDependencyService taskDependencyService) {
+	public TaskController(TaskService taskService) {
 		this.taskService = taskService;
-		this.taskDependencyService = taskDependencyService;
 	}
 
 	@PostMapping("/api/projects/{projectId}/tasks")
@@ -92,27 +87,4 @@ public class TaskController {
 		return ResponseEntity.noContent().build();
 	}
 
-	// FR-107(P2, 축소 범위): 태스크 간 선후행 의존관계. 시각화 없이 데이터 모델+CRUD API만 제공한다.
-	@GetMapping("/api/tasks/{taskId}/dependencies")
-	public ResponseEntity<TaskDependencyListResponse> listDependencies(
-			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId) {
-		return ResponseEntity.ok(taskDependencyService.listDependencies(principal, taskId));
-	}
-
-	@PostMapping("/api/tasks/{taskId}/dependencies")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
-	public ResponseEntity<TaskDependencyResponse> createDependency(
-			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId,
-			@Valid @RequestBody TaskDependencyCreateRequest request) {
-		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(taskDependencyService.createDependency(principal, taskId, request));
-	}
-
-	@DeleteMapping("/api/tasks/{taskId}/dependencies/{dependencyId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
-	public ResponseEntity<Void> deleteDependency(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long taskId, @PathVariable Long dependencyId) {
-		taskDependencyService.deleteDependency(principal, taskId, dependencyId);
-		return ResponseEntity.noContent().build();
-	}
 }
