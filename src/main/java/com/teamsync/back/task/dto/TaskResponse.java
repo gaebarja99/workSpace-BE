@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 단건 상세 조회(GET /api/tasks/{taskId}) 응답. 체크리스트를 포함한다.
+ * 단건 상세 조회(GET /api/tasks/{taskId}) 응답.
  * recurringTemplateId(FR-106): 이 태스크가 반복 태스크 템플릿의 일 배치로 자동 생성된 경우에만 값이
  * 채워진다(일반 생성 태스크는 null).
  */
@@ -22,7 +22,6 @@ public record TaskResponse(
 		LocalDate startDate,
 		LocalDate dueDate,
 		List<AssigneeResponse> assignees,
-		List<ChecklistItemResponse> checklistItems,
 		Long recurringTemplateId,
 		LocalDateTime createdAt,
 		LocalDateTime updatedAt
@@ -38,7 +37,6 @@ public record TaskResponse(
 				task.getStartDate(),
 				task.getDueDate(),
 				task.getAssignees().stream().map(AssigneeResponse::from).toList(),
-				task.getChecklistItems().stream().map(ChecklistItemResponse::from).toList(),
 				task.getRecurringTemplate() != null ? task.getRecurringTemplate().getId() : null,
 				task.getCreatedAt(),
 				task.getUpdatedAt());

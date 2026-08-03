@@ -1,9 +1,6 @@
 package com.teamsync.back.task;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
-import com.teamsync.back.task.dto.ChecklistItemResponse;
-import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
 import com.teamsync.back.task.dto.MyTaskResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskDependencyCreateRequest;
@@ -92,31 +89,6 @@ public class TaskController {
 	public ResponseEntity<Void> delete(@AuthenticationPrincipal AuthenticatedUser principal,
 			@PathVariable Long taskId) {
 		taskService.deleteTask(principal, taskId);
-		return ResponseEntity.noContent().build();
-	}
-
-	@PostMapping("/api/tasks/{taskId}/checklist-items")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
-	public ResponseEntity<ChecklistItemResponse> addChecklistItem(
-			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId,
-			@Valid @RequestBody ChecklistItemCreateRequest request) {
-		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(taskService.addChecklistItem(principal, taskId, request));
-	}
-
-	@PatchMapping("/api/tasks/{taskId}/checklist-items/{itemId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
-	public ResponseEntity<ChecklistItemResponse> updateChecklistItem(
-			@AuthenticationPrincipal AuthenticatedUser principal, @PathVariable Long taskId,
-			@PathVariable Long itemId, @Valid @RequestBody ChecklistItemUpdateRequest request) {
-		return ResponseEntity.ok(taskService.updateChecklistItem(principal, taskId, itemId, request));
-	}
-
-	@DeleteMapping("/api/tasks/{taskId}/checklist-items/{itemId}")
-	@PreAuthorize("hasAnyRole('ADMIN', 'LEADER', 'MANAGER', 'ASSISTANT_MANAGER', 'STAFF')")
-	public ResponseEntity<Void> deleteChecklistItem(@AuthenticationPrincipal AuthenticatedUser principal,
-			@PathVariable Long taskId, @PathVariable Long itemId) {
-		taskService.deleteChecklistItem(principal, taskId, itemId);
 		return ResponseEntity.noContent().build();
 	}
 

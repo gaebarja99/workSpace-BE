@@ -4,7 +4,6 @@ import com.teamsync.back.common.BaseTimeEntity;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.task.recurrence.RecurringTaskTemplate;
 import com.teamsync.back.user.User;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,13 +16,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -34,9 +29,7 @@ import lombok.NoArgsConstructor;
  * 라벨/첨부파일/댓글/활동로그(FR-105)는 후속 마이그레이션/엔티티 확장으로 다룬다.
  * 의존관계(FR-107, P2)는 TaskDependency 엔티티/TaskDependencyService로 별도 관리하며,
  * 시각화(간트뷰) 없이 데이터 모델+CRUD API+순환 감지까지만 다룬다.
- * 담당자(assignees)는 프로젝트와 마찬가지로 User를 단방향 ManyToMany로 참조하며,
- * 체크리스트(checklistItems)는 TaskChecklistItemRepository로 직접 관리하되 조회 시
- * 이 컬렉션(OrderBy position)으로도 일관된 순서를 보장한다.
+ * 담당자(assignees)는 프로젝트와 마찬가지로 User를 단방향 ManyToMany로 참조한다.
  * recurringTemplate(FR-106): RecurringTaskSchedulerService의 일 배치가 자동 생성한 태스크에만
  * 값이 채워지며(일반 생성/메시지 전환 태스크는 null), 어떤 템플릿에서 유래했는지 추적용이다.
  */
@@ -84,10 +77,6 @@ public class Task extends BaseTimeEntity {
 			joinColumns = @JoinColumn(name = "task_id"),
 			inverseJoinColumns = @JoinColumn(name = "user_id"))
 	private Set<User> assignees = new LinkedHashSet<>();
-
-	@OneToMany(mappedBy = "task", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-	@OrderBy("position ASC, id ASC")
-	private List<TaskChecklistItem> checklistItems = new ArrayList<>();
 
 	// FR-106: 이 태스크를 자동 생성한 반복 태스크 템플릿(없으면 null). 템플릿이 삭제되면
 	// ON DELETE SET NULL로 이 참조만 사라지고 태스크 자체는 그대로 유지된다(V15 마이그레이션 참고).

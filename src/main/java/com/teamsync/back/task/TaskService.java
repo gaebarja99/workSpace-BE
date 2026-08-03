@@ -1,16 +1,12 @@
 package com.teamsync.back.task;
 
 import com.teamsync.back.auth.AuthenticatedUser;
-import com.teamsync.back.task.exception.ChecklistItemNotFoundException;
 import com.teamsync.back.task.exception.InvalidAssigneeException;
 import com.teamsync.back.task.exception.InvalidTaskRequestException;
 import com.teamsync.back.project.exception.ProjectNotFoundException;
 import com.teamsync.back.task.exception.TaskNotFoundException;
 import com.teamsync.back.project.Project;
 import com.teamsync.back.project.ProjectRepository;
-import com.teamsync.back.task.dto.ChecklistItemCreateRequest;
-import com.teamsync.back.task.dto.ChecklistItemResponse;
-import com.teamsync.back.task.dto.ChecklistItemUpdateRequest;
 import com.teamsync.back.task.dto.MyTaskResponse;
 import com.teamsync.back.task.dto.TaskCreateRequest;
 import com.teamsync.back.task.dto.TaskResponse;
@@ -38,14 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class TaskService {
 
 	private final TaskRepository taskRepository;
-	private final TaskChecklistItemRepository checklistItemRepository;
 	private final ProjectRepository projectRepository;
 	private final UserRepository userRepository;
 
-	public TaskService(TaskRepository taskRepository, TaskChecklistItemRepository checklistItemRepository,
-			ProjectRepository projectRepository, UserRepository userRepository) {
+	public TaskService(TaskRepository taskRepository, ProjectRepository projectRepository,
+			UserRepository userRepository) {
 		this.taskRepository = taskRepository;
-		this.checklistItemRepository = checklistItemRepository;
 		this.projectRepository = projectRepository;
 		this.userRepository = userRepository;
 	}
@@ -159,45 +153,6 @@ public class TaskService {
 	public void deleteTask(AuthenticatedUser principal, Long taskId) {
 		Task task = getTaskInWorkspace(principal, taskId);
 		taskRepository.delete(task);
-	}
-
-	@Transactional
-	public ChecklistItemResponse addChecklistItem(AuthenticatedUser principal, Long taskId,
-			ChecklistItemCreateRequest request) {
-		Task task = getTaskInWorkspace(principal, taskId);
-		int nextPosition = (int) checklistItemRepository.countByTaskId(task.getId());
-		TaskChecklistItem item = checklistItemRepository.save(
-				new TaskChecklistItem(task, request.content().trim(), nextPosition));
-		return ChecklistItemResponse.from(item);
-	}
-
-	@Transactional
-	public ChecklistItemResponse updateChecklistItem(AuthenticatedUser principal, Long taskId, Long itemId,
-			ChecklistItemUpdateRequest request) {
-		getTaskInWorkspace(principal, taskId);
-		TaskChecklistItem item = checklistItemRepository.findByIdAndTaskId(itemId, taskId)
-				.orElseThrow(ChecklistItemNotFoundException::new);
-
-		if (request.content() != null) {
-			String trimmed = request.content().trim();
-			if (trimmed.isEmpty()) {
-				throw new InvalidTaskRequestException("체크리스트 항목 내용은 공백일 수 없습니다.");
-			}
-			item.changeContent(trimmed);
-		}
-		if (request.isChecked() != null) {
-			item.changeChecked(request.isChecked());
-		}
-
-		return ChecklistItemResponse.from(item);
-	}
-
-	@Transactional
-	public void deleteChecklistItem(AuthenticatedUser principal, Long taskId, Long itemId) {
-		getTaskInWorkspace(principal, taskId);
-		TaskChecklistItem item = checklistItemRepository.findByIdAndTaskId(itemId, taskId)
-				.orElseThrow(ChecklistItemNotFoundException::new);
-		checklistItemRepository.delete(item);
 	}
 
 	private Project getProjectInWorkspace(AuthenticatedUser principal, Long projectId) {
